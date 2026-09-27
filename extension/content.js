@@ -477,7 +477,7 @@
     const fresh = a && (!prev || JSON.stringify(prev.lastAction) !== JSON.stringify(a));
     if (fresh && a.id !== selfId) {
       // 'ad' (a pause taken back because an ad started) gets no toast; the waiting toast covers it.
-      const verb = { play: 'pressed play', pause: 'paused', seek: 'jumped to a new spot', force: 'started without waiting' }[a.action];
+      const verb = { play: 'pressed play', pause: 'paused', seek: 'jumped to a new spot', force: 'started without waiting', resync: 'synced everyone' }[a.action];
       if (verb) toast(`${a.name} ${verb}`);
     }
     if (st.phase === 'waiting') showWaiting(st);

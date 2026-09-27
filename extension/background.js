@@ -158,6 +158,12 @@ function ping(s) {
   wsSend(s, { t: 'ping', id: Date.now() });
 }
 
+// Throws away old clock samples and measures again with a quick burst of pings.
+function remeasureClock(s) {
+  s.clock = [];
+  for (let i = 0; i < 5; i++) s.timers.push(setTimeout(() => ping(s), i * 120));
+}
+
 function handleServerMessage(s, msg) {
   switch (msg.t) {
     case 'joined':
@@ -169,7 +175,7 @@ function handleServerMessage(s, msg) {
       toFrame(s, { type: 'chat-history', messages: s.chat, selfId: s.selfId });
       clearTimers(s);
       // A quick burst of pings gives a good clock offset before playback starts.
-      for (let i = 0; i < 5; i++) s.timers.push(setTimeout(() => ping(s), i * 150));
+      remeasureClock(s);
       s.timers.push(setInterval(() => ping(s), PING_INTERVAL_MS));
       s.timers.push(setInterval(() => updateExternalAd(s), 500));
       break;
@@ -179,11 +185,16 @@ function handleServerMessage(s, msg) {
       s.clock.push({ rtt, offset: msg.now - (msg.id + rtt / 2) });
       if (s.clock.length > CLOCK_SAMPLES) s.clock.shift();
       const best = s.clock.reduce((a, b) => (b.rtt < a.rtt ? b : a));
+      const changed = Math.abs(best.offset - s.offset) > 15;
       s.offset = best.offset;
       s.rtt = rtt;
+      if (changed) pushToFrame(s); // the player's timing depends on this
       break;
     }
     case 'state':
+      if (msg.lastAction && msg.lastAction.action === 'resync' && (!s.state || s.state.epoch !== msg.epoch)) {
+        remeasureClock(s);
+      }
       s.state = msg;
       s.lastReport = null;
       if (s.frameId === null) {
@@ -301,6 +312,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return statusFor(tabId);
       case 'inspect-chat':
         return s ? toFrame(s, { type: 'inspect-chat' }) : null;
+      case 'resync':
+        if (s && s.status === 'connected') wsSend(s, { t: 'intent', action: 'resync' });
+        return statusFor(tabId);
       case 'hold':
         if (s) {
           s.hold = !!msg.active;

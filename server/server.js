@@ -158,6 +158,11 @@ function applyIntent(room, member, msg) {
     setState(room, { intent: 'paused', phase: 'paused', position: pos, anchor: now });
   } else if (msg.action === 'play') {
     setState(room, { intent: 'playing', phase: 'waiting', position: pos, anchor: now });
+  } else if (msg.action === 'resync') {
+    // Everyone lines up on the room's position and, if playing, restarts together.
+    const position = positionAt(room, now);
+    if (room.intent === 'playing') setState(room, { phase: 'waiting', position, anchor: now });
+    else setState(room, { position, anchor: now });
   } else if (msg.action === 'seek') {
     // Everyone has to buffer the new position, so playback restarts through 'waiting'.
     const phase = room.intent === 'playing' ? 'waiting' : 'paused';
@@ -209,7 +214,7 @@ wss.on('connection', (ws) => {
     if (!room) return;
 
     if (msg.t === 'intent') {
-      if (['play', 'pause', 'seek'].includes(msg.action)) applyIntent(room, member, msg);
+      if (['play', 'pause', 'seek', 'resync'].includes(msg.action)) applyIntent(room, member, msg);
     } else if (msg.t === 'status') {
       if (msg.epoch !== room.epoch) return; // stale report for an older state
       const ready = !!msg.ready;

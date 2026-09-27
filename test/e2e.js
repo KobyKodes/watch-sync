@@ -114,7 +114,7 @@ async function launchUser(name) {
   };
 
   return {
-    name, ctx, page, call, video, state, player, chat, inspect, toPage, openChat, type,
+    name, ctx, sw, page, call, video, state, player, chat, inspect, toPage, openChat, type,
     join: () => call({ type: 'join', room: ROOM, name, server: `ws://localhost:${process.env.PORT}` }),
     status: () => call({ type: 'status' }),
   };
@@ -397,6 +397,29 @@ async function step(name, fn) {
       await waitFor(() => inSync(a, b, 0.1), 'drift to converge', 20000);
       assert.equal(await b.video(() => window.__seeks), 0, 'drift should be fixed without seeking');
       assert.equal((await a.status()).phase, 'playing', 'drift correction should not hold the room');
+    });
+
+    await step('"Sync everyone" fixes drift that automatic correction cannot see', async () => {
+      // Give Bob a stale clock measurement 2s off, as after a laptop wakes from
+      // sleep. His player then keeps itself "in sync" with the wrong time.
+      await b.sw.evaluate(() => {
+        for (const s of sessions.values()) {
+          s.offset += 2000;
+          s.clock = [{ rtt: 0, offset: s.offset }]; // looks like the best sample, so it sticks
+          pushToFrame(s);
+        }
+      });
+      await waitFor(async () => {
+        const [x, y] = await Promise.all([a.state(), b.state()]);
+        return Math.abs(gap(x, y)) > 1.5;
+      }, 'Bob to drift about 2s away', 20000);
+      assert.equal((await a.status()).phase, 'playing');
+
+      await a.call({ type: 'resync' });
+      await waitFor(() => inSync(a, b), 'everyone back in sync after pressing Sync everyone', 15000);
+      await sleep(2000);
+      assert.ok(await inSync(a, b), 'drifted again after resync');
+      assert.equal((await a.status()).phase, 'playing');
     });
 
     await step('late joiner is brought to the current position', async () => {

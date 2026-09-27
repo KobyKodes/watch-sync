@@ -49,6 +49,12 @@ function render(st) {
     ? `Waiting for ${st.blockers.map((b) => `${b.name} (${REASONS[b.reason] || b.reason})`).join(', ')}`
     : '';
   $('forceRow').hidden = !waiting;
+  $('resync').disabled = !ok || !st.hasVideo;
+  $('resync').onclick = async () => {
+    render(await send({ type: 'resync' }));
+    $('resync').textContent = 'Syncing…';
+    setTimeout(() => { $('resync').textContent = 'Sync everyone'; }, 1500);
+  };
   $('hold').textContent = st.hold ? 'Release hold' : 'Hold for me';
   $('hold').onclick = async () => render(await send({ type: 'hold', active: !st.hold }));
 

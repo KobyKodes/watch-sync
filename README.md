@@ -41,6 +41,7 @@ The rule is to wait for everyone. The room never plays while someone is bufferin
 
   Players often pause the show just before an ad appears. If an ad shows up within 4 s of a pause, that pause is taken back, and the room waits instead of pausing.
 - **Drift correction.** Small drift (over 0.05 s) is corrected by nudging playback speed by up to 10%, with no visible jump. Anything over 1.5 s is fixed with a seek.
+- **Sync everyone.** A button in the popup that anyone can press if things seem off. Everyone lines up on the room's position, every browser re-measures its clock against the server, and playback restarts together. This fixes drift that automatic correction can't detect, such as a stale clock measurement after a laptop wakes from sleep.
 - **Play without waiting.** Anyone can use this to stop waiting for a stuck viewer. That viewer catches up automatically once they're ready again.
 - **Content script** (`content.js`): runs in every frame (`all_frames` + `match_origin_as_fallback`) and locks onto the show's video, so an overlay ad player can't take its place.
 - **Background worker** (`background.js`): holds the WebSocket, so page CSP can't block it.
