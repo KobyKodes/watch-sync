@@ -1,0 +1,83 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; height: 100%; background: #000; }
+  #player { position: relative; width: 100%; height: 100%; }
+  #player video { width: 100%; height: 100%; }
+  .ad-video { position: absolute; inset: 0; background: #000; }
+  .skip { position: absolute; right: 12px; bottom: 48px; padding: 6px 10px; background: #0009; color: #fff; }
+</style>
+</head>
+<body>
+  <div id="player"></div>
+  <!-- Fullscreens the <video> element itself, the hardest case for overlays. -->
+  <button id="fs" style="position:absolute;left:8px;top:8px;z-index:1;opacity:.6">Fullscreen</button>
+  <script>
+    // A small stand-in for the players embed hosts use. The <video> is created
+    // by script after load, and the page can run two kinds of ads the way real
+    // players do.
+    const q = location.search;
+    const player = document.getElementById('player');
+    let main;
+    setTimeout(() => {
+      main = document.createElement('video');
+      main.src = 'episode.mp4' + q;
+      main.controls = true;
+      main.preload = 'auto';
+      player.appendChild(main);
+    }, 500);
+
+    document.getElementById('fs').onclick = () => main.requestFullscreen();
+
+    // Ad type 1: the player swaps the ad into the same <video>, then restores the episode.
+    let saved = null;
+    window.startSameElementAd = () => {
+      saved = main.currentTime;
+      main.pause();
+      main.src = 'ad.mp4' + q;
+      main.play();
+    };
+    window.endSameElementAd = () => {
+      main.src = 'episode.mp4' + q;
+      main.addEventListener('loadedmetadata', () => { main.currentTime = saved; main.play(); }, { once: true });
+    };
+
+    // Ad type 2: the player pauses the episode and overlays a separate ad player
+    // with a skip button, flagging itself with a Video.js-style class.
+    let overlay = null;
+    window.startOverlayAd = () => {
+      main.pause();
+      setTimeout(() => {
+        player.classList.add('vjs-ad-playing');
+        overlay = document.createElement('div');
+        overlay.innerHTML = '<video class="ad-video" src="ad.mp4' + q + '" autoplay></video><div class="skip">Skip ad in 5</div>';
+        player.appendChild(overlay);
+      }, 50);
+    };
+    // Ad type 3: the ad comes from an ad network in its own iframe over the player.
+    let adFrame = null;
+    window.startIframeAd = () => {
+      main.pause();
+      adFrame = document.createElement('iframe');
+      adFrame.src = 'http://ads.doubleclick.net:8081/adframe.html' + q;
+      adFrame.allow = 'autoplay';
+      adFrame.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:0';
+      player.appendChild(adFrame);
+    };
+    window.endIframeAd = () => {
+      adFrame.remove();
+      adFrame = null;
+      main.play();
+    };
+
+    window.endOverlayAd = () => {
+      player.classList.remove('vjs-ad-playing');
+      overlay.remove();
+      overlay = null;
+      main.play();
+    };
+  </script>
+</body>
+</html>

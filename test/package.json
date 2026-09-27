@@ -1,0 +1,17 @@
+{
+  "name": "watch-sync-tests",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "e2e": "node e2e.js",
+    "site": "node serve.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "playwright": "^1.63.0"
+  },
+  "private": true
+}

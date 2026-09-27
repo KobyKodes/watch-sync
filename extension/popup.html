@@ -1,0 +1,84 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    :root {
+      --bg: #ffffff; --fg: #1a1a1f; --muted: #6b6b76; --border: #dcdce2;
+      --field: #f5f5f8; --accent: #5b4bff; --accent-fg: #fff; --ok: #1f9d55; --err: #d13b3b;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #17171c; --fg: #ececf1; --muted: #9a9aa6; --border: #33333d;
+        --field: #22222a; --accent: #7a6dff; --ok: #3ccf7a; --err: #ff6b6b;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; width: 300px; padding: 16px; background: var(--bg); color: var(--fg);
+           font: 13px/1.4 system-ui, -apple-system, sans-serif; }
+    h1 { font-size: 15px; margin: 0 0 12px; }
+    label { display: block; color: var(--muted); font-size: 11px; margin: 10px 0 4px; }
+    input { width: 100%; padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px;
+            background: var(--field); color: var(--fg); font: inherit; }
+    .row { display: flex; gap: 8px; margin-top: 12px; }
+    button { flex: 1; padding: 8px; border: 1px solid var(--border); border-radius: 6px;
+             background: var(--field); color: var(--fg); font: inherit; cursor: pointer; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+    button:disabled { opacity: 0.5; cursor: default; }
+    .code { font: 600 22px/1 ui-monospace, monospace; letter-spacing: 2px; }
+    .status { display: flex; align-items: center; gap: 6px; margin: 6px 0; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+    .dot.ok { background: var(--ok); } .dot.err { background: var(--err); }
+    .muted { color: var(--muted); }
+    .error { color: var(--err); margin-top: 8px; }
+    .waiting { margin-top: 8px; padding: 8px; border-radius: 6px; background: var(--field); }
+    details { margin-top: 12px; }
+    summary { color: var(--muted); cursor: pointer; font-size: 11px; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <h1>Watch Sync</h1>
+
+  <section id="lobby">
+    <label for="name">Your name</label>
+    <input id="name" maxlength="32" placeholder="Guest">
+    <label for="room">Room code</label>
+    <input id="room" maxlength="32" placeholder="Leave empty to create a new room">
+    <div class="row">
+      <button id="join" class="primary">Create room</button>
+    </div>
+    <details>
+      <summary>Server</summary>
+      <label for="server">Relay server URL</label>
+      <input id="server">
+    </details>
+  </section>
+
+  <section id="party" hidden>
+    <div class="muted">Room code</div>
+    <div class="code" id="roomCode"></div>
+    <div class="status"><span class="dot" id="dot"></span><span id="statusText"></span></div>
+    <div class="muted" id="peers"></div>
+    <div class="muted" id="video"></div>
+    <div class="waiting" id="waiting" hidden></div>
+    <div class="row" id="forceRow" hidden>
+      <button id="force" class="primary">Play without waiting</button>
+    </div>
+    <div class="row">
+      <button id="copy">Copy invite</button>
+      <button id="hold" title="Use when an ad or anything else interrupts you and it isn't detected automatically">Hold for me</button>
+    </div>
+    <div class="row" id="openRoomUrlRow" hidden>
+      <button id="openRoomUrl">Open the room's page</button>
+    </div>
+    <div class="row">
+      <button id="leave">Leave</button>
+    </div>
+  </section>
+
+  <div class="error" id="error" hidden></div>
+  <script src="config.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

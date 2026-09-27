@@ -1,0 +1,15 @@
+# Render Blueprint for the Watch Sync relay.
+# In Render: New > Blueprint, pick this repo, and it deploys the server below.
+services:
+  - type: web
+    name: watch-sync-relay
+    runtime: node
+    plan: free
+    # Closest free region to Europe and the Middle East; others are
+    # oregon, ohio, virginia and singapore.
+    region: frankfurt
+    rootDir: server
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /
+    autoDeploy: true

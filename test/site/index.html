@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Watch Sync test site</title>
+<style>body{font-family:system-ui;margin:24px;background:#111;color:#eee}iframe{border:0;width:720px;height:405px;background:#000}</style>
+</head>
+<body>
+  <h1>Test episode</h1>
+  <p>The player below is a cross-origin iframe (127.0.0.1:8081 inside localhost:8080).</p>
+  <iframe id="player" allow="autoplay; fullscreen" allowfullscreen></iframe>
+  <script>
+    // Pass the viewer name through so the test server can throttle each viewer separately.
+    document.getElementById('player').src = 'http://127.0.0.1:8081/embed.html' + location.search;
+  </script>
+</body>
+</html>
