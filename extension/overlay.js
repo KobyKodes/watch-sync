@@ -23,11 +23,11 @@
     * { box-sizing: border-box; }
     .stage {
       position: absolute; inset: 0; pointer-events: none;
-      font: 13px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+      font: 16px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
       color: rgba(255,255,255,0.94); -webkit-font-smoothing: antialiased;
       --edge: 16px; --controls: 72px;
     }
-    .stage.compact { --edge: 10px; --controls: 56px; font-size: 12px; }
+    .stage.compact { --edge: 10px; --controls: 56px; font-size: 14px; }
 
     /* Clear glass: no fill or blur, so the picture shows through untouched. A thin
        light rim gives each surface its shape, and text carries its own shadow to
@@ -47,7 +47,7 @@
     /* Chat button, top right, shows on activity. */
     .pill {
       position: absolute; top: var(--edge); right: var(--edge);
-      width: 38px; height: 38px; border-radius: 999px;
+      width: 42px; height: 42px; border-radius: 999px;
       display: grid; place-items: center; pointer-events: none;
       opacity: 0; transform: scale(0.92);
       transition: opacity 220ms ease, transform 220ms ease;
@@ -62,10 +62,10 @@
     /* Floating previews while the panel is closed. */
     .stream {
       position: absolute; right: var(--edge); bottom: var(--controls);
-      width: min(300px, 34%); display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+      width: min(360px, 40%); display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
     }
     .bubble {
-      max-width: 100%; padding: 7px 12px 8px; border-radius: 18px; pointer-events: auto;
+      max-width: 100%; padding: 8px 14px 9px; border-radius: 20px; pointer-events: auto;
       opacity: 0; transform: translateY(6px);
       transition: opacity 260ms ease, transform 260ms ease;
       overflow-wrap: anywhere;
@@ -73,28 +73,28 @@
     .bubble.in { opacity: 1; transform: none; }
     .bubble.out { opacity: 0; transform: translateY(-4px); }
     .bubble .who { font-weight: 600; margin-right: 6px; }
-    .bubble.system { color: rgba(255,255,255,0.85); font-size: 12px; }
+    .bubble.system { color: rgba(255,255,255,0.85); font-size: 14px; }
 
     /* Open panel. */
     .panel {
       position: absolute; right: var(--edge); bottom: var(--controls);
       max-height: min(50%, calc(100% - var(--edge) - var(--controls)));
-      width: clamp(220px, 26%, 320px); border-radius: 24px;
+      width: clamp(250px, 30%, 380px); border-radius: 26px;
       display: flex; flex-direction: column; pointer-events: auto; overflow: hidden;
       opacity: 0; transform: translateX(12px) scale(0.98); visibility: hidden;
       transition: opacity 240ms ease, transform 240ms ease, visibility 0s linear 240ms;
     }
-    .stage.compact .panel { width: min(62%, 280px); border-radius: 20px; }
+    .stage.compact .panel { width: min(66%, 310px); border-radius: 22px; }
     .panel.open { opacity: 1; transform: none; visibility: visible; transition-delay: 0s; }
     .panel.open.rest { opacity: 0.5; transition: opacity 600ms ease; }
     .head, .compose, .replying { flex: none; }
     .head {
       display: flex; align-items: center; justify-content: space-between;
-      padding: 12px 10px 6px 16px; font-weight: 600; font-size: 13px;
+      padding: 12px 10px 6px 16px; font-weight: 600; font-size: 16px;
     }
-    .head .people { font-weight: 400; color: rgba(255,255,255,0.8); font-size: 12px; margin-left: 6px; }
+    .head .people { font-weight: 400; color: rgba(255,255,255,0.8); font-size: 14px; margin-left: 6px; }
     .close {
-      width: 26px; height: 26px; border-radius: 999px; display: grid; place-items: center;
+      width: 30px; height: 30px; border-radius: 999px; display: grid; place-items: center;
       color: rgba(255,255,255,0.75);
     }
     .close:hover { background: rgba(255,255,255,0.12); color: #fff; }
@@ -103,7 +103,7 @@
       display: flex; flex-direction: column; gap: 8px;
       mask-image: linear-gradient(to bottom, transparent, #000 10px);
     }
-    .empty { margin: 6px auto; color: rgba(255,255,255,0.8); font-size: 12px; text-align: center; padding: 0 12px; }
+    .empty { margin: 6px auto; color: rgba(255,255,255,0.8); font-size: 14px; text-align: center; padding: 0 12px; }
     .msg, .bubble:not(.system) { touch-action: pan-y; user-select: none; -webkit-user-select: none; }
     .msg { position: relative; max-width: 88%; overflow-wrap: anywhere; transition: transform 220ms cubic-bezier(.2,.9,.3,1.2); }
     .msg.swiping, .bubble.swiping { transition: none; }
@@ -116,25 +116,25 @@
     }
     .quote {
       display: block; margin: 2px 0 3px; padding-left: 7px; border-left: 2px solid rgba(255,255,255,0.55);
-      font-size: 11.5px; color: rgba(255,255,255,0.78);
+      font-size: 14px; color: rgba(255,255,255,0.78);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
     }
     .quote b { font-weight: 600; margin-right: 4px; }
-    .msg .who { display: block; font-size: 11px; font-weight: 600; margin-bottom: 1px; }
+    .msg .who { display: block; font-size: 13px; font-weight: 600; margin-bottom: 1px; }
     .msg.self {
-      align-self: flex-end; padding: 6px 11px 7px; border-radius: 16px;
+      align-self: flex-end; padding: 7px 13px 8px; border-radius: 18px;
       border: 0.5px solid rgba(255,255,255,0.32);
     }
-    .msg.system { align-self: center; color: rgba(255,255,255,0.8); font-size: 11px; }
+    .msg.system { align-self: center; color: rgba(255,255,255,0.8); font-size: 13px; }
     .compose { display: flex; align-items: center; gap: 6px; padding: 8px 8px 8px 8px; }
     .emoji-btn {
-      width: 30px; height: 30px; border-radius: 999px; flex: none; display: grid; place-items: center;
+      width: 34px; height: 34px; border-radius: 999px; flex: none; display: grid; place-items: center;
       color: rgba(255,255,255,0.85);
     }
     .emoji-btn:hover, .emoji-btn.on { color: #fff; box-shadow: inset 0 0 0 0.5px rgba(255,255,255,0.5); }
     /* Two rows that scroll sideways, so the picker fits even in a small player. */
     .emojis {
-      display: none; grid-auto-flow: column; grid-template-rows: repeat(2, 30px);
+      display: none; grid-auto-flow: column; grid-template-rows: repeat(2, 36px);
       grid-auto-columns: calc((100% - 14px) / 8); gap: 2px; padding: 4px 8px 0;
       flex: none; overflow-x: auto; scrollbar-width: none; overscroll-behavior: contain;
       mask-image: linear-gradient(to right, #000 88%, transparent);
@@ -142,7 +142,7 @@
     .emojis::-webkit-scrollbar { display: none; }
     .emojis.open { display: grid; }
     .emojis button {
-      height: 30px; border-radius: 8px; font-size: 18px; line-height: 30px; text-shadow: none;
+      height: 36px; border-radius: 9px; font-size: 22px; line-height: 36px; text-shadow: none;
       font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
     }
     .emojis button:hover { box-shadow: inset 0 0 0 0.5px rgba(255,255,255,0.5); }
@@ -151,11 +151,11 @@
       border-left: 2px solid rgba(255,255,255,0.7);
     }
     .replying.on { display: flex; }
-    .replying .rtext { flex: 1; min-width: 0; font-size: 11.5px; line-height: 1.3; }
+    .replying .rtext { flex: 1; min-width: 0; font-size: 14px; line-height: 1.3; }
     .replying .rlabel { display: block; color: rgba(255,255,255,0.8); }
     .replying .rsnip { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .field {
-      flex: 1; min-width: 0; height: 34px; border-radius: 999px; padding: 0 14px;
+      flex: 1; min-width: 0; height: 40px; border-radius: 999px; padding: 0 16px;
       border: 0.5px solid rgba(255,255,255,0.35); background: transparent;
       color: #fff; font: inherit; outline: none;
       text-shadow: inherit;
@@ -163,7 +163,7 @@
     .field::placeholder { color: rgba(255,255,255,0.7); }
     .field:focus { border-color: rgba(255,255,255,0.4); }
     .send {
-      width: 30px; height: 30px; border-radius: 999px; flex: none; display: grid; place-items: center;
+      width: 34px; height: 34px; border-radius: 999px; flex: none; display: grid; place-items: center;
       background: #fff; color: #1c1c1f; transform: scale(0.6); opacity: 0;
       transition: transform 160ms ease, opacity 160ms ease;
     }
@@ -172,7 +172,7 @@
     /* Notices (sync status), top center. */
     .notice {
       position: absolute; top: var(--edge); left: 50%; max-width: min(70%, 520px);
-      padding: 8px 16px 9px; border-radius: 999px; text-align: center;
+      padding: 9px 18px 10px; border-radius: 999px; text-align: center;
       opacity: 0; transform: translate(-50%, -6px); pointer-events: none;
       transition: opacity 220ms ease, transform 220ms ease;
     }
@@ -184,10 +184,10 @@
     }
   `;
 
-  const ICON_CHAT = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4c4.97 0 9 3.13 9 7s-4.03 7-9 7c-.9 0-1.77-.1-2.6-.3L5 20l1.2-3.6C4.2 15.1 3 13.2 3 11c0-3.87 4.03-7 9-7Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>';
+  const ICON_CHAT = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4c4.97 0 9 3.13 9 7s-4.03 7-9 7c-.9 0-1.77-.1-2.6-.3L5 20l1.2-3.6C4.2 15.1 3 13.2 3 11c0-3.87 4.03-7 9-7Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>';
   const ICON_CLOSE = '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
   const ICON_REPLY = '<svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true"><path d="M5 2.5 1.8 5.6 5 8.7M2.2 5.6h4.6c2 0 3.4 1.3 3.4 3.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-  const ICON_EMOJI = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.6"/><path d="M8.5 14c.9 1.3 2 2 3.5 2s2.6-.7 3.5-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="9.2" cy="10" r="1.1" fill="currentColor"/><circle cx="14.8" cy="10" r="1.1" fill="currentColor"/></svg>';
+  const ICON_EMOJI = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.6"/><path d="M8.5 14c.9 1.3 2 2 3.5 2s2.6-.7 3.5-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="9.2" cy="10" r="1.1" fill="currentColor"/><circle cx="14.8" cy="10" r="1.1" fill="currentColor"/></svg>';
   const ICON_SEND = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 12V2.5M2.8 6.5 7 2.3l4.2 4.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
   function hueFor(name) {
