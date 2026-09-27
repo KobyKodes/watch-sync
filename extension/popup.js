@@ -13,6 +13,17 @@ function send(msg) {
   return chrome.runtime.sendMessage({ ...msg, tabId: tab.id });
 }
 
+// Copies text and briefly confirms on the button itself.
+async function copy(buttonId, text) {
+  const btn = $(buttonId);
+  const label = btn.dataset.label || btn.textContent;
+  btn.dataset.label = label;
+  await navigator.clipboard.writeText(text);
+  btn.textContent = 'Copied';
+  clearTimeout(btn.resetTimer);
+  btn.resetTimer = setTimeout(() => { btn.textContent = label; }, 1500);
+}
+
 function render(st) {
   $('lobby').hidden = st.joined;
   $('party').hidden = !st.joined;
@@ -44,14 +55,8 @@ function render(st) {
   const differentPage = st.roomUrl && st.roomUrl !== tab.url;
   $('openRoomUrlRow').hidden = !differentPage;
   $('openRoomUrl').onclick = () => chrome.tabs.update(tab.id, { url: st.roomUrl });
-  $('copy').onclick = async () => {
-    const pageUrl = st.roomUrl || tab.url;
-    await navigator.clipboard.writeText(
-      `Join my Watch Sync room: ${st.room}\nOpen this page first: ${pageUrl}`
-    );
-    $('copy').textContent = 'Copied';
-    setTimeout(() => { $('copy').textContent = 'Copy invite'; }, 1500);
-  };
+  $('copyLink').onclick = () => copy('copyLink', st.roomUrl || tab.url);
+  $('copyCode').onclick = () => copy('copyCode', st.room);
 }
 
 async function refresh() {
