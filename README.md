@@ -18,7 +18,7 @@ cd server && npm install && npm start      # relay on ws://localhost:8787
 2. Open the page with the video, click the Watch Sync icon, enter your name and click **Create room**.
 3. Click **Copy invite** and send it to your friend. They open the same page, enter the room code and click **Join room**.
 
-To watch with someone on another network, deploy the relay (see below). Both of you must use the same **Server** URL, which you can set in the popup.
+The extension connects to the hosted relay at `wss://watch-sync-relay-hs9v.onrender.com` by default (set in `extension/config.js`). To use a relay on your own machine instead, enter `ws://localhost:8787` under **Server** in the popup. Everyone in a room must use the same server.
 
 ## Deploy the relay
 
