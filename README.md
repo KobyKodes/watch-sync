@@ -16,13 +16,15 @@ cd server && npm install && npm start      # relay on ws://localhost:8787
 
 1. Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and select the `extension/` folder.
 2. Open the page with the video, click the Watch Sync icon, enter your name and click **Create room**.
-3. Click **Copy invite** and send it to your friend. They open the same page, enter the room code and click **Join room**.
+3. Click the room code to copy it, or click **Copy invite link** to copy the page address, and send it to your friend. They open the same page, enter the room code and click **Join room**.
 
-The extension connects to the hosted relay at `wss://watch-sync-relay-hs9v.onrender.com` by default (set in `extension/config.js`). To use a relay on your own machine instead, enter `ws://localhost:8787` under **Server** in the popup. Everyone in a room must use the same server.
+The extension always connects to the hosted relay at `wss://watch-sync-relay-hs9v.onrender.com`, set in `extension/config.js`. There's no server setting in the popup. To develop against a relay on your own machine, temporarily change that file to `ws://localhost:8787` and reload the extension. The tests do this for you by loading a copy of the extension pointed at their own local relay.
+
+The relay runs on Render's free tier, which puts it to sleep when it's idle. Waking it takes up to a minute. Opening the popup sends the relay a wake-up request, and the popup shows "Waking up the server…" with a timer until the relay answers, then "Server ready". If you join while it's still waking, you connect as soon as it's up.
 
 ## Deploy the relay
 
-`server/` is a standard Node app that listens on `$PORT`. It runs on Render, Railway, Fly.io or any VPS. Once it's deployed, set the popup's server URL to `wss://your-app.example.com`. Use `wss://`, not `ws://`, for anything that isn't localhost.
+`server/` is a standard Node app that listens on `$PORT`. It runs on Render, Railway, Fly.io or any VPS. Once it's deployed, set `WATCH_SYNC_SERVER` in `extension/config.js` to `wss://your-app.example.com`. Use `wss://`, not `ws://`, for anything that isn't localhost.
 
 ## How it works
 
@@ -52,7 +54,7 @@ The chat is a Liquid Glass-style overlay drawn over the video. It's built to sta
 
 - **Previews:** new messages float up as small glass bubbles on the right edge, above the player controls, and fade after 6 seconds.
 - **Chat button:** appears in the top-right corner only while the mouse moves, like player controls. Press ⌥C (Alt+C) to open or close the chat.
-- **Panel:** narrow, only as tall as its messages up to half the video's height, and it fades to half opacity after 4 seconds without typing or hovering. When it's full, the oldest messages are dropped. It never scrolls.
+- **Panel:** narrow, only as tall as its messages up to half the video's height, and it fades to half opacity after 4 seconds without typing or hovering. When it's full, scroll up to read older messages; it keeps the last 200. While you're scrolled up, new messages don't move you, and a **New messages ↓** button takes you back to the latest. Sending a message also jumps back down.
 - **Replies:** swipe right on any message to reply to it, with a mouse drag, a touch, or a two-finger trackpad swipe. A "Replying to …" bar appears above the text box; Esc or × cancels it. The sent message shows a quote of the original above it. The server fills in the quote from its history, so a reply can't misquote anyone.
 - **Emoji:** the smiley button opens two rows of reaction emoji that scroll sideways. Clicking one inserts it at the cursor.
 - **Fullscreen:** the chat works whether the site fullscreens its player container or the `<video>` itself. For the `<video>` case, the extension also makes the video's parent fullscreen, holds the chat there as a transparent, click-through layer, and undoes it all when you exit.

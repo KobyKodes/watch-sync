@@ -9,8 +9,12 @@
   const MAX_STREAM = 3;
   const PILL_IDLE_MS = 2500; // chat button hides like player controls do
   const REST_MS = 4000; // an idle open panel recedes so the picture comes first
-  const MAX_LOG = 200; // cap while hidden; once shown, only what fits is kept
+  const MAX_LOG = 200; // older messages than this are dropped
+  const PINNED_PX = 8; // this close to the bottom counts as following new messages
   const SWIPE_PX = 56; // drag this far right to reply
+  const HOLD_MS = 350; // press and hold a preview this long to move the chat
+  const DRAG_PX = 6; // movement before a press on the header or button counts as a drag
+  const CORNERS = ['tl', 'tr', 'bl', 'br'];
   const EMOJIS = ['😂', '🤣', '😭', '🥲', '😅', '😮', '😱', '🤯', '😳', '🫣', '😬', '😍', '🥹', '🥺', '😤', '😡',
     '🙄', '🤔', '😴', '💀', '🔥', '❤️', '💔', '👀', '👍', '👎', '👏', '🙌', '🤝', '💯', '✨', '🍿'];
   const MIN_W = 240;
@@ -99,10 +103,18 @@
     }
     .close:hover { background: rgba(255,255,255,0.12); color: #fff; }
     .log {
-      flex: 0 1 auto; min-height: 44px; overflow: hidden; padding: 6px 14px 10px;
+      flex: 0 1 auto; min-height: 44px; overflow-y: auto; overscroll-behavior: contain; padding: 6px 14px 10px;
       display: flex; flex-direction: column; gap: 8px;
       mask-image: linear-gradient(to bottom, transparent, #000 10px);
+      scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.35) transparent;
     }
+    /* Shown while scrolled up and something new arrives; jumps back to the latest. */
+    .newer {
+      position: sticky; bottom: 0; align-self: center; flex: none; display: none;
+      padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; color: #fff;
+      background: rgba(30,30,36,0.75); border: 0.5px solid rgba(255,255,255,0.35); cursor: pointer;
+    }
+    .newer.on { display: block; }
     .empty { margin: 6px auto; color: rgba(255,255,255,0.8); font-size: 14px; text-align: center; padding: 0 12px; }
     .msg, .bubble:not(.system) { touch-action: pan-y; user-select: none; -webkit-user-select: none; }
     .msg { position: relative; max-width: 88%; overflow-wrap: anywhere; transition: transform 220ms cubic-bezier(.2,.9,.3,1.2); }
@@ -179,8 +191,25 @@
     .notice.show { opacity: 1; transform: translate(-50%, 0); }
     .notice.show.action { pointer-events: auto; cursor: pointer; }
 
+    /* The chat can sit in any corner. Bottom right is the default above;
+       .left and .top mirror it. */
+    .stage.left .pill { right: auto; left: var(--edge); }
+    .stage.left .stream { right: auto; left: var(--edge); align-items: flex-start; }
+    .stage.left .panel { right: auto; left: var(--edge); transform: translateX(-12px) scale(0.98); }
+    .stage.left .panel.open { transform: none; }
+    .stage.top .stream { bottom: auto; top: calc(var(--edge) + 50px); }
+    .stage.top .panel { bottom: auto; top: var(--edge); }
+
+    /* Moving the chat: drag the panel's header or the chat button, or press and
+       hold a preview. It snaps to the nearest corner on release. */
+    .head { cursor: grab; touch-action: none; }
+    .pill { touch-action: none; }
+    .moving { cursor: grabbing !important; scale: 1.02; filter: drop-shadow(0 8px 18px rgba(0,0,0,0.45)); }
+    .moving, .moving * { user-select: none; }
+    .snapping { transition: translate 300ms cubic-bezier(.2,.9,.3,1), opacity 240ms ease, transform 240ms ease !important; }
+
     @media (prefers-reduced-motion: reduce) {
-      .pill, .bubble, .panel, .notice, .send, .msg { transition-duration: 0s !important; }
+      .pill, .bubble, .panel, .notice, .send, .msg, .snapping { transition-duration: 0s !important; }
     }
   `;
 
@@ -203,7 +232,7 @@
     return node;
   }
 
-  window.__watchSyncCreateOverlay = function createOverlay({ onSend }) {
+  window.__watchSyncCreateOverlay = function createOverlay({ onSend, onMove = () => {}, onOpenChange = () => {} }) {
     const host = document.createElement('watch-sync-overlay');
     host.setAttribute('popover', 'manual');
     // Neutralize the popover's default box and any page styles aimed at it.
@@ -224,7 +253,7 @@
 
     const pill = el('button', 'pill glass', `${ICON_CHAT}<span class="dot"></span>`);
     pill.setAttribute('aria-label', 'Open chat (Option+C)');
-    pill.title = 'Chat (⌥C)';
+    pill.title = 'Chat (⌥C). Drag to move it to another corner.';
 
     const stream = el('div', 'stream');
     stream.setAttribute('aria-live', 'polite');
@@ -232,12 +261,17 @@
     const panel = el('section', 'panel glass');
     panel.setAttribute('aria-label', 'Party chat');
     const head = el('div', 'head', '<span>Chat<span class="people"></span></span>');
+    head.title = 'Drag to move the chat to another corner';
     const closeBtn = el('button', 'close', ICON_CLOSE);
     closeBtn.setAttribute('aria-label', 'Close chat');
     head.append(closeBtn);
     const log = el('div', 'log');
     const empty = el('div', 'empty', 'Messages you send appear on everyone’s screen.');
-    log.append(empty);
+    const newer = el('button', 'newer', 'New messages ↓');
+    newer.type = 'button';
+    log.append(newer);
+    let pinned = true; // the log follows new messages until the viewer scrolls up
+    log.prepend(empty);
     const compose = el('form', 'compose');
     const field = el('input', 'field');
     Object.assign(field, { type: 'text', placeholder: 'Message', maxLength: 500, autocomplete: 'off', enterKeyHint: 'send' });
@@ -324,7 +358,7 @@
       stage.classList.toggle('compact', width < 640);
       if (Math.round(height) !== lastStageHeight) {
         lastStageHeight = Math.round(height);
-        trim();
+        follow();
       }
     }
 
@@ -442,6 +476,7 @@
     }
 
     function setOpen(open) {
+      if (open !== isOpen) onOpenChange(open);
       isOpen = open;
       panel.classList.toggle('open', open);
       pill.classList.toggle('show', !open);
@@ -450,7 +485,8 @@
         unread = false;
         pill.classList.remove('unread');
         stream.replaceChildren();
-        trim();
+        pinned = true;
+        follow();
         wake();
         setTimeout(() => field.focus(), 60);
       } else {
@@ -465,7 +501,7 @@
       emojis.classList.toggle('open', open);
       emojiBtn.classList.toggle('on', open);
       emojiBtn.setAttribute('aria-expanded', String(open));
-      if (!open) trim();
+      follow();
     }
 
     function setReply(m) {
@@ -478,7 +514,7 @@
         field.focus();
         wake();
       }
-      trim();
+      follow();
     }
 
     emojiBtn.addEventListener('click', () => {
@@ -504,8 +540,103 @@
     });
     replyCancel.addEventListener('click', () => { setReply(null); field.focus(); });
 
-    pill.addEventListener('click', () => setOpen(true));
+    pill.addEventListener('click', () => {
+      if (justMoved) return;
+      setOpen(true);
+    });
     closeBtn.addEventListener('click', () => setOpen(false));
+
+    // ---- Moving the chat ----------------------------------------------------------
+
+    let corner = 'br';
+    let justMoved = false; // the click that ends a drag shouldn't also open the chat
+
+    // Slides each part of the chat from where it was to where its corner puts it.
+    function setCorner(c, { animate = false } = {}) {
+      if (!CORNERS.includes(c)) return;
+      const parts = [pill, stream, panel];
+      const before = animate ? parts.map((n) => n.getBoundingClientRect()) : null;
+      parts.forEach((n) => { n.style.translate = ''; });
+      corner = c;
+      stage.classList.toggle('top', c[0] === 't');
+      stage.classList.toggle('left', c[1] === 'l');
+      follow();
+      if (!animate) return;
+      parts.forEach((n, i) => {
+        const after = n.getBoundingClientRect();
+        const dx = before[i].left - after.left;
+        const dy = before[i].top - after.top;
+        if (!dx && !dy) return;
+        n.classList.remove('snapping');
+        n.style.translate = `${dx}px ${dy}px`;
+        n.getBoundingClientRect(); // commit the start position before animating
+        n.classList.add('snapping');
+        n.style.translate = '';
+        setTimeout(() => n.classList.remove('snapping'), 320);
+      });
+    }
+
+    // Drags `node` with the pointer, then snaps the chat to the corner nearest to
+    // where it was let go. `handle` receives the pointer events.
+    function beginMove(handle, node, pointerId, x0, y0, first) {
+      try { handle.setPointerCapture(pointerId); } catch { /* pointer already gone */ }
+      node.classList.add('moving');
+      const startRect = node.getBoundingClientRect();
+      let dx = 0;
+      let dy = 0;
+      const move = (e) => {
+        if (e.pointerId !== pointerId) return;
+        dx = e.clientX - x0;
+        dy = e.clientY - y0;
+        node.style.translate = `${dx}px ${dy}px`;
+      };
+      const end = (e) => {
+        if (e.pointerId !== pointerId) return;
+        handle.removeEventListener('pointermove', move);
+        handle.removeEventListener('pointerup', end);
+        handle.removeEventListener('pointercancel', end);
+        node.classList.remove('moving');
+        const s = stage.getBoundingClientRect();
+        const cx = startRect.left + startRect.width / 2 + dx - s.left;
+        const cy = startRect.top + startRect.height / 2 + dy - s.top;
+        const next = `${cy < s.height / 2 ? 't' : 'b'}${cx < s.width / 2 ? 'l' : 'r'}`;
+        setCorner(next, { animate: true });
+        onMove(next);
+        justMoved = true;
+        setTimeout(() => { justMoved = false; }, 0);
+        if (isOpen) wake();
+      };
+      handle.addEventListener('pointermove', move);
+      handle.addEventListener('pointerup', end);
+      handle.addEventListener('pointercancel', end);
+      if (first) move(first); // so the chat doesn't lag behind the pointer
+    }
+
+    // The header and the chat button move the chat once the pointer travels a
+    // few pixels; a press that doesn't move stays a click.
+    function dragFrom(handle, node) {
+      handle.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0 || e.target.closest('.close')) return;
+        const { pointerId, clientX: x0, clientY: y0 } = e;
+        try { handle.setPointerCapture(pointerId); } catch { /* pointer already gone */ }
+        const watch = (ev) => {
+          if (ev.pointerId !== pointerId) return;
+          if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < DRAG_PX) return;
+          stop();
+          beginMove(handle, node, pointerId, x0, y0, ev);
+        };
+        const stop = () => {
+          handle.removeEventListener('pointermove', watch);
+          handle.removeEventListener('pointerup', stop);
+          handle.removeEventListener('pointercancel', stop);
+        };
+        handle.addEventListener('pointermove', watch);
+        handle.addEventListener('pointerup', stop);
+        handle.addEventListener('pointercancel', stop);
+      });
+    }
+    dragFrom(head, panel);
+    dragFrom(pill, pill);
     panel.addEventListener('pointerenter', wake);
     panel.addEventListener('pointermove', wake);
     field.addEventListener('focus', wake);
@@ -559,12 +690,14 @@
       pull(node, 0);
     }
 
-    function attachSwipe(node, m) {
+    // `moves` (a preview's stack) is picked up and moved by pressing and holding.
+    function attachSwipe(node, m, moves = null) {
       node.append(el('span', 'hint', ICON_REPLY));
       let startX = null;
       let startY = 0;
       let dx = 0;
       let dragging = false;
+      let holdTimer = null;
       node.addEventListener('pointerdown', (e) => {
         if (e.button !== 0) return;
         // Keep the cursor in the message box while swiping.
@@ -573,14 +706,24 @@
         startY = e.clientY;
         dx = 0;
         dragging = false;
+        if (moves) {
+          const { pointerId, clientX, clientY } = e;
+          clearTimeout(holdTimer);
+          holdTimer = setTimeout(() => {
+            if (startX === null || dragging) return;
+            startX = null;
+            beginMove(node, moves, pointerId, clientX, clientY);
+          }, HOLD_MS);
+        }
       });
       node.addEventListener('pointermove', (e) => {
         if (startX === null) return;
         const x = e.clientX - startX;
         const y = e.clientY - startY;
         if (!dragging) {
-          if (Math.abs(y) > 10 && Math.abs(y) > Math.abs(x)) { startX = null; return; }
+          if (Math.abs(y) > 10 && Math.abs(y) > Math.abs(x)) { startX = null; clearTimeout(holdTimer); return; }
           if (x < 6) return;
+          clearTimeout(holdTimer);
           dragging = true;
           node.setPointerCapture(e.pointerId);
           node.classList.add('swiping');
@@ -589,6 +732,7 @@
         pull(node, dx);
       });
       const end = () => {
+        clearTimeout(holdTimer);
         if (startX === null) return;
         if (dragging && dx >= SWIPE_PX) setReply(m);
         startX = null;
@@ -629,20 +773,30 @@
       return row;
     }
 
-    // The panel never grows past half the video; when it's full, the oldest
-    // messages are dropped rather than scrolled.
-    function trim() {
-      if (pickerOpen) return; // the picker only borrows space; don't lose messages to it
-      while (log.childElementCount > 1 && log.scrollHeight > log.clientHeight + 1) {
-        log.firstElementChild.remove();
-      }
+    // The panel never grows past half the video; older messages scroll. The log
+    // follows new messages unless the viewer has scrolled up to read.
+    log.addEventListener('scroll', () => {
+      pinned = log.scrollHeight - log.scrollTop - log.clientHeight <= PINNED_PX;
+      if (pinned) newer.classList.remove('on');
+    });
+    newer.addEventListener('click', () => {
+      pinned = true;
+      follow();
+    });
+
+    function follow() {
+      if (!pinned) return;
+      log.scrollTop = log.scrollHeight;
+      newer.classList.remove('on');
     }
 
     function appendToLog(m) {
       empty.remove();
-      log.append(logEntry(m));
-      while (log.childElementCount > MAX_LOG) log.firstElementChild.remove();
-      trim();
+      if (isSelf(m)) pinned = true; // sending jumps back to the latest
+      log.insertBefore(logEntry(m), newer);
+      while (log.childElementCount > MAX_LOG + 1) log.firstElementChild.remove();
+      if (pinned) follow();
+      else newer.classList.add('on');
     }
 
     function float(m) {
@@ -650,14 +804,17 @@
       if (m.kind !== 'system') b.append(whoSpan(m.name));
       if (m.replyTo) b.append(quoteEl(m.replyTo));
       b.append(document.createTextNode(m.text));
-      if (m.kind !== 'system') attachSwipe(b, m);
+      if (m.kind !== 'system') attachSwipe(b, m, stream);
       stream.append(b);
       while (stream.childElementCount > MAX_STREAM) stream.firstElementChild.remove();
       requestAnimationFrame(() => b.classList.add('in'));
-      setTimeout(() => {
+      const fade = () => {
+        // Don't pull a preview out from under someone who's moving it.
+        if (stream.classList.contains('moving')) return setTimeout(fade, 500);
         b.classList.add('out');
         setTimeout(() => b.remove(), 300);
-      }, STREAM_MS);
+      };
+      setTimeout(fade, STREAM_MS);
     }
 
     function addMessage(m) {
@@ -709,33 +866,43 @@
         }
       },
       setSelf(id) { selfIdRef = id; },
+      setCorner,
       setPeople(count) {
         root.querySelector('.people').textContent = count > 1 ? `${count} watching` : '';
       },
       setHistory(messages) {
-        log.replaceChildren();
-        if (!messages.length) log.append(empty);
-        messages.forEach((m) => log.append(logEntry(m)));
-        trim();
+        log.replaceChildren(newer);
+        if (!messages.length) log.prepend(empty);
+        messages.forEach((m) => log.insertBefore(logEntry(m), newer));
+        pinned = true;
+        follow();
       },
       addMessage,
       notice: showNotice,
       toggle() {
         if (visible) setOpen(!isOpen);
       },
+      open() {
+        if (visible) setOpen(true);
+      },
       // Layout snapshot for tests and troubleshooting (the shadow root is closed).
       inspect() {
         const rect = (n) => { const r = n.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; };
         return {
           open: isOpen,
+          corner,
           stage: rect(stage),
           panel: rect(panel),
+          pill: rect(pill),
+          head: rect(head),
           messages: [...log.querySelectorAll('.msg')].map((n) => ({
             text: n.lastChild.previousSibling ? n.lastChild.previousSibling.textContent : n.textContent,
             quote: n.querySelector('.quote')?.textContent || null,
             rect: rect(n),
           })),
           bubbles: [...stream.querySelectorAll('.bubble')].map((n) => ({ text: n.textContent, rect: rect(n) })),
+          log: { rect: rect(log), scrollTop: log.scrollTop, scrollHeight: log.scrollHeight, clientHeight: log.clientHeight },
+          newer: newer.classList.contains('on') ? rect(newer) : null,
           replyingTo: replyTo,
           pickerOpen,
           emojiButton: rect(emojiBtn),

@@ -8,8 +8,9 @@ const { chromium } = require('playwright');
 process.env.PORT = process.env.TEST_RELAY_PORT || '8797'; // separate from a relay you may be running
 const relay = require('../server/server.js');
 const site = require('./serve.js');
+const localExtension = require('./extension.js');
 
-const EXT = path.resolve(__dirname, '../extension');
+const EXT = localExtension(process.env.PORT);
 const OUT = path.resolve(process.argv[2] || path.join(__dirname, 'shots'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -40,8 +41,8 @@ async function user(name) {
   const b = await user('Maya');
   try {
     await sleep(1500);
-    await a.call({ type: 'join', room: 'SHOTS', name: 'Jad', server: `ws://localhost:${process.env.PORT}` });
-    await b.call({ type: 'join', room: 'SHOTS', name: 'Maya', server: `ws://localhost:${process.env.PORT}` });
+    await a.call({ type: 'join', room: 'SHOTS', name: 'Jad' });
+    await b.call({ type: 'join', room: 'SHOTS', name: 'Maya' });
     await sleep(1500);
     await a.frame().evaluate(() => { const v = document.querySelector('video'); v.currentTime = 95; v.play(); });
     await sleep(2500);

@@ -3,86 +3,206 @@
 <head>
   <meta charset="utf-8">
   <style>
+    @font-face { font-family: "Big Shoulders Display"; src: url(fonts/big-shoulders-display.woff2) format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Instrument Sans"; src: url(fonts/instrument-sans.woff2) format("woff2"); font-weight: 400 700; }
+
     :root {
-      --bg: #ffffff; --fg: #1a1a1f; --muted: #6b6b76; --border: #dcdce2;
-      --field: #f5f5f8; --accent: #5b4bff; --accent-fg: #fff; --ok: #1f9d55; --err: #d13b3b;
+      /* The marquee keeps its colors in both themes; it's a sign, not a surface. */
+      --curtain: #5a1626; --curtain-deep: #3b0f1a; --felt: #1e0b10; --letter: #f4ece1;
+      --bulb: #f2b632; --bulb-off: #4a1d27;
+
+      --paper: #fbf6f7; --ink: #2a1217; --muted: #7d646a; --line: #e6d6da; --field: #ffffff;
+      --primary: #f2b632; --primary-ink: #3b0f1a; --focus: #5a1626;
+      --ok: #2f7a4b; --warn: #94600a; --err: #b3263a; --notice: #fdf0d2;
     }
     @media (prefers-color-scheme: dark) {
       :root {
-        --bg: #17171c; --fg: #ececf1; --muted: #9a9aa6; --border: #33333d;
-        --field: #22222a; --accent: #7a6dff; --ok: #3ccf7a; --err: #ff6b6b;
+        --paper: #1a0b0f; --ink: #f5e9eb; --muted: #b39aa0; --line: #3c242a; --field: #24111a;
+        --focus: #f2b632; --ok: #7fd49c; --warn: #f2b632; --err: #ff8a98; --notice: #33200f;
       }
     }
+
     * { box-sizing: border-box; }
-    body { margin: 0; width: 300px; padding: 16px; background: var(--bg); color: var(--fg);
-           font: 13px/1.4 system-ui, -apple-system, sans-serif; }
-    h1 { font-size: 15px; margin: 0 0 12px; }
-    label { display: block; color: var(--muted); font-size: 11px; margin: 10px 0 4px; }
-    input { width: 100%; padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px;
-            background: var(--field); color: var(--fg); font: inherit; }
-    .row { display: flex; gap: 8px; margin-top: 12px; }
-    button { flex: 1; padding: 8px; border: 1px solid var(--border); border-radius: 6px;
-             background: var(--field); color: var(--fg); font: inherit; cursor: pointer; }
-    button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
-    button:disabled { opacity: 0.5; cursor: default; }
-    .code { font: 600 22px/1 ui-monospace, monospace; letter-spacing: 2px; }
-    .status { display: flex; align-items: center; gap: 6px; margin: 6px 0; }
-    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-    .dot.ok { background: var(--ok); } .dot.err { background: var(--err); }
-    .muted { color: var(--muted); }
-    .error { color: var(--err); margin-top: 8px; }
-    .waiting { margin-top: 8px; padding: 8px; border-radius: 6px; background: var(--field); }
-    details { margin-top: 12px; }
-    summary { color: var(--muted); cursor: pointer; font-size: 11px; }
     [hidden] { display: none !important; }
+    body {
+      margin: 0; width: 320px; padding: 12px 14px 14px; background: var(--paper); color: var(--ink);
+      font: 13.5px/1.45 "Instrument Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased;
+    }
+    button, input { font: inherit; color: inherit; }
+    :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+    /* ---- The marquee ---- */
+    .marquee {
+      position: relative; border-radius: 14px; padding: 9px 10px;
+      background:
+        repeating-linear-gradient(90deg, rgba(0,0,0,0.16) 0 2px, transparent 2px 9px),
+        linear-gradient(var(--curtain), var(--curtain-deep));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 1px 2px rgba(59,15,26,0.25);
+    }
+    .bulbs { display: flex; justify-content: space-between; padding: 0 4px; }
+    .bulbs i {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--bulb-off);
+      box-shadow: inset 0 -1px 1px rgba(0,0,0,0.35); transition: background 300ms, box-shadow 300ms;
+    }
+    .marquee[data-state="ok"] .bulbs i,
+    .marquee[data-state="warn"] .bulbs i.lit {
+      background: radial-gradient(circle at 35% 35%, #fff6d8, var(--bulb) 60%);
+      box-shadow: 0 0 6px 1px rgba(242,182,50,0.65);
+    }
+
+    .board {
+      display: flex; flex-direction: column; justify-content: center; gap: 0;
+      width: 100%; height: 104px; margin: 8px 0; padding: 6px 10px; border: 0; border-radius: 4px;
+      background:
+        repeating-linear-gradient(180deg, transparent 0 9px, rgba(0,0,0,0.55) 9px 10px, rgba(255,255,255,0.05) 10px 11px),
+        var(--felt);
+      box-shadow: inset 0 2px 8px rgba(0,0,0,0.6);
+      text-align: center; cursor: default;
+    }
+    button.board { cursor: copy; }
+    .row-letters {
+      display: flex; justify-content: center; gap: 0.08em;
+      font: 800 var(--size, 44px)/1 "Big Shoulders Display", Impact, sans-serif; color: var(--letter);
+    }
+    /* Each letter is a separate plastic piece pushed into the felt, so none sit perfectly straight. */
+    .row-letters span {
+      display: inline-block; min-width: 0.3em;
+      transform: translateY(var(--dy, 0)) rotate(var(--rot, 0));
+      text-shadow: 0 1px 0 rgba(0,0,0,0.5), 0 2px 3px rgba(0,0,0,0.45);
+    }
+    .row-letters span.drop { animation: drop 420ms cubic-bezier(.3,1.4,.5,1) both; animation-delay: var(--delay, 0ms); }
+    @keyframes drop {
+      from { opacity: 0; transform: translateY(-14px) rotate(calc(var(--rot, 0) * 4)); }
+    }
+
+    .status {
+      display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+      margin: 9px 2px 0; font-size: 12.5px;
+    }
+    .status .text { font-weight: 600; }
+    .status.ok .text { color: var(--ok); }
+    .status.warn .text { color: var(--warn); }
+    .status.err .text { color: var(--err); }
+    .status .ping { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .hint { margin: 4px 2px 0; color: var(--muted); font-size: 12px; }
+
+    /* ---- Lobby ---- */
+    form { margin-top: 14px; display: grid; gap: 10px; }
+    label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
+    input {
+      width: 100%; height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px;
+      background: var(--field); color: var(--ink); font-size: 14px;
+    }
+    input:focus { border-color: var(--focus); outline: none; }
+    input::placeholder { color: var(--muted); opacity: 0.8; }
+    #room { font: 700 20px/1.1 "Big Shoulders Display", Impact, sans-serif; letter-spacing: 0.12em; text-transform: uppercase; }
+    #room::placeholder { font: 13.5px "Instrument Sans", system-ui, sans-serif; letter-spacing: 0; text-transform: none; }
+
+    /* ---- Buttons ---- */
+    .btn {
+      flex: 1; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px;
+      background: transparent; cursor: pointer; font-weight: 600; font-size: 13px;
+    }
+    .btn:hover:not(:disabled) { border-color: var(--muted); }
+    .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
+    .btn.primary:hover:not(:disabled) { border-color: var(--primary-ink); }
+    .btn:disabled { opacity: 0.45; cursor: default; }
+    .btn.done { border-color: var(--ok); color: var(--ok); }
+    .buttons { display: flex; gap: 8px; }
+    .text-btn {
+      border: 0; background: none; padding: 2px 0; cursor: pointer; color: var(--muted);
+      text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px;
+    }
+    .text-btn:hover { color: var(--ink); text-decoration-color: currentColor; }
+
+    /* ---- In a room ---- */
+    .people { margin: 16px 2px 0; }
+    .people h2 { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+    .people h2 .count { color: var(--muted); font-weight: 400; margin-left: 4px; }
+    .members { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+    .members li { display: flex; align-items: center; gap: 9px; min-width: 0; }
+    .avatar {
+      flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+      font: 800 15px/1 "Big Shoulders Display", Impact, sans-serif; color: #fff;
+    }
+    .members .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .members .you { flex: none; color: var(--muted); font-size: 12px; }
+    .members .state { margin-left: auto; flex: none; font-size: 12px; color: var(--warn); }
+    .alone { margin: 2px 0 0; color: var(--muted); }
+    .video { margin: 10px 2px 0; color: var(--muted); font-size: 12px; }
+
+    .waiting { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--notice); }
+    .waiting p { margin: 0 0 8px; }
+
+    .actions { margin-top: 14px; display: grid; gap: 8px; }
+    .foot { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding: 0 2px; }
+    .error { color: var(--err); margin: 10px 2px 0; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .row-letters span.drop { animation: none; }
+      .bulbs i { transition: none; }
+    }
   </style>
 </head>
 <body>
-  <h1>Watch Sync</h1>
+  <header class="marquee" id="marquee" data-state="warn">
+    <div class="bulbs" aria-hidden="true"></div>
+    <div class="board" id="board" role="img" aria-label="Watch Sync"></div>
+    <div class="bulbs" aria-hidden="true"></div>
+  </header>
+  <div class="status" id="status" role="status">
+    <span class="text" id="statusText"></span>
+    <span class="ping" id="ping"></span>
+  </div>
+  <p class="hint" id="wakeHint" hidden>The free server sleeps when nobody's using it. Waking it can take up to a minute.</p>
 
   <section id="lobby">
-    <label for="name">Your name</label>
-    <input id="name" maxlength="32" placeholder="Guest">
-    <label for="room">Room code</label>
-    <input id="room" maxlength="32" placeholder="Leave empty to create a new room">
-    <div class="row">
-      <button id="join" class="primary">Create room</button>
-    </div>
-    <details>
-      <summary>Server</summary>
-      <label for="server">Relay server URL</label>
-      <input id="server">
-    </details>
+    <form id="joinForm">
+      <label>Your name
+        <input id="name" maxlength="32" placeholder="Guest" autocomplete="nickname">
+      </label>
+      <label>Room code
+        <input id="room" maxlength="32" placeholder="Leave empty to start a new room" autocomplete="off" spellcheck="false">
+      </label>
+      <div class="buttons">
+        <button id="join" class="btn primary" type="submit">Start a room</button>
+      </div>
+    </form>
   </section>
 
   <section id="party" hidden>
-    <div class="muted">Room code</div>
-    <div class="code" id="roomCode"></div>
-    <div class="status"><span class="dot" id="dot"></span><span id="statusText"></span></div>
-    <div class="muted" id="peers"></div>
-    <div class="muted" id="video"></div>
-    <div class="waiting" id="waiting" hidden></div>
-    <div class="row" id="forceRow" hidden>
-      <button id="force" class="primary">Play without waiting</button>
+    <div class="people" id="people">
+      <h2>Who's here<span class="count" id="count"></span></h2>
+      <ul class="members" id="members"></ul>
+      <p class="alone" id="alone" hidden>Nobody else yet. Send them the code or the invite link.</p>
     </div>
-    <div class="row">
-      <button id="copyLink" title="Copies the address of the page you're watching">Copy link</button>
-      <button id="copyCode" title="Copies just the room code">Copy code</button>
+    <p class="video" id="video"></p>
+
+    <div class="waiting" id="waiting" hidden>
+      <p id="waitingText"></p>
+      <div class="buttons"><button id="force" class="btn primary">Play without waiting</button></div>
     </div>
-    <div class="row">
-      <button id="resync" title="Everyone jumps to the same spot, re-checks their timing, and starts again together">Sync everyone</button>
-      <button id="hold" title="Use when an ad or anything else interrupts you and it isn't detected automatically">Hold for me</button>
+
+    <div class="actions">
+      <div class="buttons">
+        <button id="resync" class="btn primary" title="Everyone jumps to the same spot, re-checks their timing, and starts again together">Sync everyone</button>
+        <button id="hold" class="btn" title="Use when an ad or anything else interrupts you and it isn't detected automatically">Hold for me</button>
+      </div>
+      <div class="buttons">
+        <button id="copyCode" class="btn">Copy code</button>
+        <button id="copyLink" class="btn" title="Copies the address of the page you're watching">Copy invite link</button>
+      </div>
+      <div class="buttons" id="openRoomUrlRow" hidden>
+        <button id="openRoomUrl" class="btn">Open the room's page</button>
+      </div>
     </div>
-    <div class="row" id="openRoomUrlRow" hidden>
-      <button id="openRoomUrl">Open the room's page</button>
-    </div>
-    <div class="row">
-      <button id="leave">Leave</button>
+    <div class="foot">
+      <button id="leave" class="text-btn">Leave room</button>
+      <button id="openChat" class="text-btn" title="Option+C on the video does the same">Open chat</button>
     </div>
   </section>
 
-  <div class="error" id="error" hidden></div>
-  <script src="config.js"></script>
+  <p class="error" id="error" hidden></p>
   <script src="popup.js"></script>
 </body>
 </html>

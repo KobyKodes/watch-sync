@@ -1,4 +1,3 @@
-// Relay server everyone connects to unless they enter another one under Server
-// in the popup. After deploying (see render.yaml), set this to the service's
-// address with wss:// in place of https://.
-const WATCH_SYNC_DEFAULT_SERVER = 'wss://watch-sync-relay-hs9v.onrender.com';
+// The relay server every copy of the extension connects to (see render.yaml).
+// Use the service's address with wss:// in place of https://.
+const WATCH_SYNC_SERVER = 'wss://watch-sync-relay-hs9v.onrender.com';

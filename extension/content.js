@@ -487,8 +487,45 @@
   // Notices and chat share the glass overlay drawn over the video.
   let overlay = null;
   function ui() {
-    if (!overlay) overlay = window.__watchSyncCreateOverlay({ onSend: (text, replyTo) => send({ type: 'chat', text, replyTo }) });
+    if (!overlay) {
+      overlay = window.__watchSyncCreateOverlay({
+        onSend: (text, replyTo) => send({ type: 'chat', text, replyTo }),
+        onMove: saveCorner,
+        onOpenChange: (open) => send({ type: 'chat-open', open }),
+      });
+      loadCorner();
+    }
     return overlay;
+  }
+
+  // Where the chat sits is remembered per site: the page in the address bar,
+  // not the player's iframe, which is often shared by many sites.
+  function siteKey() {
+    const top = location.ancestorOrigins?.[location.ancestorOrigins.length - 1];
+    try {
+      return top && top !== 'null' ? new URL(top).host : location.host;
+    } catch {
+      return location.host;
+    }
+  }
+
+  async function loadCorner() {
+    try {
+      const { chatCorners = {} } = await chrome.storage.local.get('chatCorners');
+      if (chatCorners[siteKey()]) overlay.setCorner(chatCorners[siteKey()]);
+    } catch {
+      // Extension was reloaded; keep the default corner.
+    }
+  }
+
+  async function saveCorner(corner) {
+    try {
+      const { chatCorners = {} } = await chrome.storage.local.get('chatCorners');
+      chatCorners[siteKey()] = corner;
+      await chrome.storage.local.set({ chatCorners });
+    } catch {
+      // Extension was reloaded; the move still applies to this page.
+    }
   }
 
   function toast(text, opts) {
@@ -533,6 +570,9 @@
         break;
       case 'toggle-chat':
         if (overlay) overlay.toggle();
+        break;
+      case 'open-chat':
+        if (overlay) overlay.open();
         break;
       case 'toast':
         toast(msg.text);

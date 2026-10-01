@@ -5,7 +5,6 @@
 
 importScripts('config.js');
 
-const DEFAULT_SERVER = WATCH_SYNC_DEFAULT_SERVER;
 const PING_INTERVAL_MS = 10000; // also keeps the service worker alive (Chrome 116+)
 const CLOCK_SAMPLES = 10;
 // Ad frames heartbeat every 500ms while their ad plays. Hidden tabs throttle
@@ -15,11 +14,62 @@ const CHAT_KEEP = 100;
 
 const sessions = new Map(); // tabId -> session
 
+// The relay runs on Render's free tier, which sleeps when idle and takes up to a
+// minute to wake. Any HTTPS request wakes it, so the popup triggers one when it
+// opens and shows "Waking up the server" until the relay answers.
+const RELAY_HTTP = WATCH_SYNC_SERVER.replace(/^ws/, 'http');
+const WAKE_SLOW_MS = 1500; // an answer slower than this means the relay was asleep
+const WAKE_GIVE_UP_MS = 120000;
+const READY_FRESH_MS = 60000; // how long a successful check is trusted
+const relay = { state: 'unknown', wakingSince: 0, checkedAt: 0, checking: false };
+
+async function wakeRelay() {
+  if (relay.checking) return;
+  if (relay.state === 'ready' && Date.now() - relay.checkedAt < READY_FRESH_MS) return;
+  relay.checking = true;
+  const start = Date.now();
+  const slow = setTimeout(() => {
+    relay.state = 'waking';
+    relay.wakingSince = start;
+  }, WAKE_SLOW_MS);
+  let ready = false;
+  while (!ready && Date.now() - start < WAKE_GIVE_UP_MS) {
+    try {
+      const res = await fetch(RELAY_HTTP, { cache: 'no-store', signal: AbortSignal.timeout(30000) });
+      // While Render boots the service it can answer with its own error page.
+      ready = res.ok && (await res.text()).startsWith('watch-sync relay ok');
+    } catch {
+      // Not up yet.
+    }
+    if (!ready) await new Promise((r) => setTimeout(r, 2000));
+  }
+  clearTimeout(slow);
+  relay.state = ready ? 'ready' : 'down';
+  relay.checkedAt = Date.now();
+  relay.checking = false;
+  // Sessions that gave up while the relay slept are mid-backoff; connect them now.
+  if (ready) {
+    for (const s of sessions.values()) {
+      if (s.status === 'reconnecting') {
+        clearTimers(s);
+        openSocket(s);
+      }
+    }
+  }
+}
+
+function relayStatus() {
+  return {
+    state: relay.state,
+    wakingFor: relay.state === 'waking' ? Math.round((Date.now() - relay.wakingSince) / 1000) : 0,
+  };
+}
+
 function newSession(tabId, cfg) {
   return {
     tabId,
     room: cfg.room,
-    server: cfg.server || DEFAULT_SERVER,
+    server: WATCH_SYNC_SERVER,
     name: cfg.name || 'Guest',
     url: cfg.url || '',
     ws: null,
@@ -41,19 +91,55 @@ function newSession(tabId, cfg) {
     timers: [],
     closedByUser: false,
     retries: 0,
+    chatOpen: false, // whether the chat panel is open in the video frame
+    unread: 0, // messages from others that arrived while the chat was out of sight
   };
+}
+
+// The toolbar icon shows unread messages from every synced tab, so a party in a
+// background tab can still get your attention.
+const BADGE_COLOR = '#F2B632';
+const BADGE_TEXT_COLOR = '#3B0F1A';
+
+function updateBadge() {
+  let total = 0;
+  for (const s of sessions.values()) total += s.unread;
+  chrome.action.setBadgeBackgroundColor({ color: BADGE_COLOR });
+  chrome.action.setBadgeTextColor?.({ color: BADGE_TEXT_COLOR });
+  chrome.action.setBadgeText({ text: total > 99 ? '99+' : total ? String(total) : '' });
+}
+
+function clearUnread(s) {
+  if (!s.unread) return;
+  s.unread = 0;
+  updateBadge();
+}
+
+// A message counts as unread unless the chat is open in the tab you're looking at.
+async function countUnread(s, message) {
+  if (message.kind === 'system' || message.from === s.selfId) return;
+  let active = false;
+  try {
+    active = (await chrome.tabs.get(s.tabId)).active;
+  } catch {
+    return; // tab closed
+  }
+  if (s.chatOpen && active) return;
+  s.unread++;
+  updateBadge();
 }
 
 async function saveConfigs() {
   const configs = {};
   for (const [tabId, s] of sessions) {
-    configs[tabId] = { room: s.room, server: s.server, name: s.name, url: s.url };
+    configs[tabId] = { room: s.room, name: s.name, url: s.url };
   }
   await chrome.storage.session.set({ configs });
 }
 
 async function restoreSessions() {
   const { configs = {} } = await chrome.storage.session.get('configs');
+  updateBadge(); // a restarted worker starts with nothing unread
   for (const [tabId, cfg] of Object.entries(configs)) {
     const id = Number(tabId);
     if (!sessions.has(id)) {
@@ -127,15 +213,17 @@ function openSocket(s) {
     clearTimers(s);
     s.status = 'reconnecting';
     s.state = null;
+    // The relay may have gone to sleep or restarted; find out, and wake it if so.
+    if (relay.state === 'ready') relay.state = 'unknown';
+    wakeRelay();
     const delay = Math.min(30000, 1000 * 2 ** s.retries++);
     s.timers.push(setTimeout(() => {
       if (sessions.get(s.tabId) === s) openSocket(s);
     }, delay));
   };
 
-  ws.onerror = () => {
-    s.error = `Could not reach ${s.server}`;
-  };
+  // Failures show through relayStatus() and the reconnecting status.
+  ws.onerror = () => {};
 }
 
 function clearTimers(s) {
@@ -151,6 +239,7 @@ function disconnect(tabId, { silent = false } = {}) {
   if (s.ws) s.ws.close();
   sessions.delete(tabId);
   saveConfigs();
+  if (s.unread) updateBadge();
   if (!silent) toFrame(s, { type: 'left' });
 }
 
@@ -208,6 +297,7 @@ function handleServerMessage(s, msg) {
       s.chat.push(msg.message);
       if (s.chat.length > CHAT_KEEP) s.chat.shift();
       toFrame(s, { type: 'chat', message: msg.message, selfId: s.selfId });
+      countUnread(s, msg.message);
       break;
     case 'chat-error':
       toFrame(s, { type: 'toast', text: msg.error });
@@ -254,6 +344,7 @@ function pickFrame(s) {
   }
   if (best !== s.frameId) {
     s.frameId = best;
+    s.chatOpen = false; // a new frame starts with its chat closed
     s.lastReport = null;
     if (best !== null) {
       pushToFrame(s);
@@ -265,15 +356,17 @@ function pickFrame(s) {
 
 function statusFor(tabId) {
   const s = sessions.get(tabId);
-  if (!s) return { joined: false };
+  if (!s) return { joined: false, relay: relayStatus() };
   const st = s.state;
   return {
     joined: true,
     room: s.room,
     server: s.server,
     name: s.name,
+    selfId: s.selfId,
     status: s.status,
     error: s.error,
+    relay: relayStatus(),
     roomUrl: s.roomUrl,
     rtt: s.rtt,
     hasVideo: s.frameId !== null,
@@ -282,6 +375,7 @@ function statusFor(tabId) {
     blockers: st ? st.blockers : [],
     members: st ? st.members : [],
     chat: s.chat.slice(-20),
+    unread: s.unread,
   };
 }
 
@@ -296,6 +390,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     switch (msg.type) {
       // From the popup.
       case 'status':
+        wakeRelay();
         return statusFor(tabId);
       case 'join': {
         const tab = await chrome.tabs.get(tabId);
@@ -312,6 +407,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return statusFor(tabId);
       case 'inspect-chat':
         return s ? toFrame(s, { type: 'inspect-chat' }) : null;
+      case 'open-chat':
+        if (s) await toFrame(s, { type: 'open-chat' });
+        return statusFor(tabId);
       case 'resync':
         if (s && s.status === 'connected') wsSend(s, { t: 'intent', action: 'resync' });
         return statusFor(tabId);
@@ -345,6 +443,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       case 'report':
         if (fromMain && s.state) report(s, msg.status);
         return;
+      case 'chat-open':
+        if (fromMain) {
+          s.chatOpen = !!msg.open;
+          if (s.chatOpen) clearUnread(s);
+        }
+        return;
       case 'chat':
         if (fromMain && s.status === 'connected') wsSend(s, { t: 'chat', text: msg.text, replyTo: msg.replyTo || null });
         return;
@@ -365,6 +469,12 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
   const id = tab ? tab.id : (await chrome.tabs.query({ active: true, currentWindow: true }))[0]?.id;
   const s = sessions.get(id);
   if (s) toFrame(s, { type: 'toggle-chat' });
+});
+
+// Coming back to a tab whose chat is open means you can see the messages.
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  const s = sessions.get(tabId);
+  if (s && s.chatOpen) clearUnread(s);
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => disconnect(tabId, { silent: true }));

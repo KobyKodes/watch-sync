@@ -10,8 +10,9 @@ const { chromium } = require('playwright');
 process.env.PORT = process.env.TEST_RELAY_PORT || '8797'; // separate from a relay you may be running
 const relay = require('../server/server.js');
 const site = require('./serve.js');
+const localExtension = require('./extension.js');
 
-const EXT = path.resolve(__dirname, '../extension');
+const EXT = localExtension(process.env.PORT);
 const ROOM = 'E2ETEST';
 const IN_SYNC_SEC = 0.3; // how close positions must be while playing
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -115,7 +116,7 @@ async function launchUser(name) {
 
   return {
     name, ctx, sw, page, call, video, state, player, chat, inspect, toPage, openChat, type,
-    join: () => call({ type: 'join', room: ROOM, name, server: `ws://localhost:${process.env.PORT}` }),
+    join: () => call({ type: 'join', room: ROOM, name }),
     status: () => call({ type: 'status' }),
   };
 }
@@ -286,21 +287,43 @@ async function step(name, fn) {
       assert.ok(!(await a.inspect()).pickerOpen, 'picker closes after sending');
     });
 
-    await step('chat panel stays within half the video; oldest messages drop off', async () => {
+    await step('chat panel stays within half the video; older messages scroll', async () => {
       for (let i = 1; i <= 16; i++) {
         await b.type(`msg ${i}`);
         await sleep(650); // stay under the server's 8-per-5s limit
       }
       await waitFor(async () => (await a.status()).chat.some((m) => m.text === 'msg 16'), 'last message delivered', 5000);
+      const atBottom = (st) => st.log.scrollHeight - st.log.scrollTop - st.log.clientHeight <= 8;
       for (const u of [a, b]) {
         const st = await u.inspect();
         const texts = st.messages.map((m) => m.text);
         assert.ok(st.panel.h <= st.stage.h / 2 + 1, `${u.name}: panel ${st.panel.h}px exceeds half of ${st.stage.h}px`);
         assert.equal(texts[texts.length - 1], 'msg 16', `${u.name}: newest message should be last`);
-        assert.ok(!texts.includes('msg 1'), `${u.name}: oldest messages should be discarded, got ${texts.join(' | ')}`);
+        assert.ok(texts.includes('msg 1'), `${u.name}: older messages should be kept, got ${texts.join(' | ')}`);
+        assert.ok(st.log.scrollHeight > st.log.clientHeight, `${u.name}: log should overflow and scroll`);
+        assert.ok(atBottom(st), `${u.name}: log should follow the newest message`);
         const last = st.messages[st.messages.length - 1].rect;
         assert.ok(last.y + last.h <= st.panel.y + st.panel.h, `${u.name}: newest message is cut off`);
       }
+
+      // Bob scrolls up to the start; a new message doesn't yank him back down.
+      // Overlay rects are relative to the player's iframe.
+      const frameBox = await b.page.locator('iframe').boundingBox();
+      let st = await b.inspect();
+      await b.page.mouse.move(frameBox.x + st.log.rect.x + st.log.rect.w / 2, frameBox.y + st.log.rect.y + st.log.rect.h / 2);
+      for (let i = 0; i < 10; i++) { await b.page.mouse.wheel(0, -400); await sleep(30); }
+      await waitFor(async () => (await b.inspect()).log.scrollTop === 0, 'Bob scrolled to the oldest message', 3000);
+      st = await b.inspect();
+      const first = st.messages[0].rect;
+      assert.ok(first.y >= st.log.rect.y - 1 && first.y + first.h <= st.log.rect.y + st.log.rect.h + 1, 'the oldest message should be visible after scrolling up');
+      await a.type('one more');
+      await waitFor(async () => !!(await b.inspect()).newer, '"New messages" button for Bob', 5000);
+      assert.equal((await b.inspect()).log.scrollTop, 0, 'a new message should not move a viewer who scrolled up');
+      const btn = (await b.inspect()).newer;
+      await b.page.mouse.click(frameBox.x + btn.x + btn.w / 2, frameBox.y + btn.y + btn.h / 2);
+      await waitFor(async () => atBottom(await b.inspect()), 'jump back to the newest message', 3000);
+      assert.equal((await b.inspect()).newer, null, '"New messages" button should hide at the bottom');
+
       const video = await Promise.all([a.state(), b.state()]);
       assert.ok(!video[0].paused && !video[1].paused, 'chatting should not pause playback');
     });
