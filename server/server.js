@@ -11,7 +11,7 @@ const MAX_ROOM_SIZE = 16;
 const START_DELAY_MS = 700; // lead time so every client can start at the same instant
 const UNRESPONSIVE_MS = 10000; // members that never report for a state stop blocking
 // Reasons that mean "not watching right now" rather than "hold the room for me".
-const NON_BLOCKING = new Set(['novideo']);
+const NON_BLOCKING = new Set(['novideo', 'standby']);
 const CHAT_HISTORY = 50; // messages kept per room for people who join later
 const CHAT_MAX_LEN = 500;
 const CHAT_BURST = 8; // messages allowed per member within CHAT_WINDOW_MS

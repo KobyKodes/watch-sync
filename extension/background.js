@@ -78,6 +78,9 @@ function newSession(tabId, cfg) {
     roomUrl: '',
     // Sessions picked back up after a worker restart already had their chance.
     openedRoomPage: !!cfg.restored,
+    // Joining a room that's already under way starts on standby: we leave the page
+    // alone until the viewer presses play. null until the first room state arrives.
+    standby: cfg.restored ? false : null,
     state: null, // latest room state from the server
     clock: [], // recent { rtt, offset } samples
     offset: 0, // server time minus local time, from the lowest-RTT sample
@@ -174,6 +177,7 @@ function pushToFrame(s) {
     offset: s.offset,
     externalAd: s.externalAd,
     hold: s.hold,
+    standby: s.standby === true,
     selfId: s.selfId,
   });
 }
@@ -317,6 +321,7 @@ function handleServerMessage(s, msg) {
       }
       s.state = msg;
       s.lastReport = null;
+      if (s.standby === null) s.standby = msg.lastAction !== null;
       if (s.frameId === null) {
         // Nothing to play here yet; tell the room not to wait for us.
         report(s, { epoch: msg.epoch, ready: false, reason: 'novideo', pos: null });
@@ -473,6 +478,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return;
       case 'report':
         if (fromMain && s.state) report(s, msg.status);
+        return;
+      case 'started':
+        // The viewer pressed play on their own; from here on the room drives the player.
+        if (fromMain && s.standby) {
+          s.standby = false;
+          pushToFrame(s);
+        }
         return;
       case 'chat-open':
         if (fromMain) {

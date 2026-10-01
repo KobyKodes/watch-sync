@@ -530,11 +530,18 @@ async function step(name, fn) {
       assert.equal((await a.status()).phase, 'playing');
     });
 
-    await step('late joiner is brought to the current position', async () => {
+    await step('late joiner waits until they press play, then is brought to the current position', async () => {
       const c = await launchUser('Carol');
       users.push(c);
       await waitFor(async () => (await c.video((v) => !!v && v.readyState >= 1)) === true, 'Carol video ready');
       await c.join();
+      // Standby: her player is left alone and the room doesn't wait for her.
+      await waitFor(async () => (await a.status()).members.some((m) => m.name === 'Carol' && m.reason === 'standby'), 'Carol on standby');
+      await sleep(1500);
+      const idle = await c.state();
+      assert.ok(idle.paused && idle.time < 1, `Carol's player should be untouched, got ${JSON.stringify(idle)}`);
+      assert.equal((await a.status()).phase, 'playing', 'room should keep playing while Carol is on standby');
+      await c.video((v) => v.play());
       await waitFor(async () => (await inSync(b, c)) && (await inSync(a, c)), 'Carol in sync', 20000);
       const history = (await c.status()).chat.map((m) => m.text);
       assert.ok(history.includes('msg 16'), `Carol should see earlier chat, got ${JSON.stringify(history)}`);

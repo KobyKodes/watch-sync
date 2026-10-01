@@ -224,6 +224,10 @@
   // and must not move the room.
   let following = true;
   let seededEpoch = -1;
+  // Joined a room that's already under way: hands off the page until the viewer
+  // presses play themselves, which on many sites is what opens the player.
+  let standby = false;
+  let standbyToastShown = false;
   let autoplayBlocked = false;
   let rateAdjusted = false;
   let stallSince = 0;
@@ -282,6 +286,19 @@
 
   function tick() {
     if (!video || !room || !joined) return;
+
+    if (standby) {
+      if (video.paused) {
+        if (!standbyToastShown) {
+          standbyToastShown = true;
+          toast('Press play to join the room', { sticky: true });
+        }
+        // Don't touch the player, and don't make the room wait for us.
+        return report(false, 'standby');
+      }
+      standby = false;
+      send({ type: 'started' });
+    }
     const now = serverNow();
 
     const ad = detectAd();
@@ -396,6 +413,7 @@
     offset = msg.offset;
     externalAd = msg.externalAd;
     hold = msg.hold;
+    standby = !!msg.standby;
     joined = true;
     if (startTimer && (!prev || prev.anchor !== room.anchor || room.phase !== 'playing')) {
       clearTimeout(startTimer);
@@ -441,7 +459,7 @@
       return;
     }
     if (event.type === 'play') autoplayBlocked = false;
-    if (adActive || (following && !untouchedSoloRoom()) || Date.now() < quietUntil) return;
+    if (standby || adActive || (following && !untouchedSoloRoom()) || Date.now() < quietUntil) return;
 
     if (event.type === 'seeked') {
       if (seekTarget !== null && Math.abs(video.currentTime - seekTarget) < 0.75) {

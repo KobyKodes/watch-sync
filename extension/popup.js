@@ -142,10 +142,10 @@ function renderMembers(st) {
       li.append(you);
     }
     const reason = blocking.get(m.id);
-    if (reason) {
+    if (reason || m.reason === 'standby') {
       const state = document.createElement('span');
-      state.className = 'state blocking';
-      state.textContent = REASONS[reason] || reason;
+      state.className = reason ? 'state blocking' : 'state';
+      state.textContent = reason ? REASONS[reason] || reason : "hasn't pressed play";
       li.append(state);
     }
     return li;
