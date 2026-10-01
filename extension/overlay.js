@@ -61,7 +61,7 @@
 
     /* Floating previews while the panel is closed. */
     .stream {
-      position: absolute; right: var(--edge); bottom: var(--controls);
+      position: absolute; right: var(--edge); bottom: calc(var(--controls) + 32px);
       width: min(360px, 40%); display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
     }
     .bubble {
