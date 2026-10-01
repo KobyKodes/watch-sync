@@ -109,13 +109,18 @@ async function launchUser(name) {
     await page.mouse.click(x, y);
     await sleep(350);
   };
+  const focusField = async () => {
+    await openChat();
+    const f = await toPage((await inspect()).field);
+    await page.mouse.click(f.x + f.w / 2, f.y + f.h / 2);
+  };
   const type = async (text) => {
     await page.keyboard.type(text);
     await page.keyboard.press('Enter');
   };
 
   return {
-    name, ctx, sw, page, call, video, state, player, chat, inspect, toPage, openChat, type,
+    name, ctx, sw, page, call, video, state, player, chat, inspect, toPage, openChat, focusField, type,
     join: () => call({ type: 'join', room: ROOM, name }),
     status: () => call({ type: 'status' }),
   };
@@ -328,6 +333,86 @@ async function step(name, fn) {
       assert.ok(!video[0].paused && !video[1].paused, 'chatting should not pause playback');
     });
 
+    await step('drag the chat to any corner; the spot is saved for the site', async () => {
+      // Drags in small steps, like a hand would; `hold` presses still first.
+      const drag = async (u, from, to, hold = 0) => {
+        await u.page.mouse.move(from.x, from.y);
+        await u.page.mouse.down();
+        if (hold) await sleep(hold);
+        for (let i = 1; i <= 8; i++) {
+          await u.page.mouse.move(from.x + ((to.x - from.x) * i) / 8, from.y + ((to.y - from.y) * i) / 8);
+          await sleep(20);
+        }
+        await u.page.mouse.up();
+        await sleep(400); // snap animation
+      };
+      const box = await a.page.locator('iframe').boundingBox();
+      const center = (r) => ({ x: box.x + r.x + r.w / 2, y: box.y + r.y + r.h / 2 });
+      const saved = async () => (await a.sw.evaluate(() => chrome.storage.local.get('chatCorners'))).chatCorners;
+
+      // The panel moves by its header.
+      await a.openChat();
+      let st = await a.inspect();
+      await drag(a, center(st.head), { x: box.x + 80, y: box.y + 60 });
+      st = await a.inspect();
+      assert.equal(st.corner, 'tl');
+      assert.ok(st.panel.x < 30 && st.panel.y < 30, `panel should sit top left, got ${JSON.stringify(st.panel)}`);
+      assert.ok(st.open, 'dragging the header should not close the chat');
+      // Saved under the page's site, not the player iframe's.
+      assert.deepEqual(await saved(), { 'localhost:8080': 'tl' });
+
+      // A press and hold on a preview moves the previews; a plain swipe still replies (tested above).
+      await a.page.keyboard.press('Escape');
+      await waitFor(async () => !(await a.inspect()).open, 'Esc still closes the chat after moving it', 3000);
+      await b.focusField();
+      await b.type('move me');
+      await waitFor(async () => (await a.inspect()).bubbles.some((x) => x.text.includes('move me')), 'preview for Alice', 5000);
+      st = await a.inspect();
+      const bubble = st.bubbles.find((x) => x.text.includes('move me'));
+      await drag(a, center(bubble.rect), { x: box.x + 60, y: box.y + box.height - 60 }, 600);
+      st = await a.inspect();
+      assert.equal(st.corner, 'bl');
+      assert.equal(st.replyingTo, null, 'moving a preview should not start a reply');
+      assert.ok(st.bubbles.every((x) => x.rect.x < box.width / 2), 'previews should sit on the left');
+
+      // The chat button moves too, and a drag doesn't count as a click.
+      await a.page.mouse.move(box.x + 40, box.y + 40);
+      await a.page.mouse.move(box.x + 35, box.y + 35);
+      await sleep(250);
+      st = await a.inspect();
+      await drag(a, center(st.pill), { x: box.x + box.width - 60, y: box.y + box.height - 60 });
+      st = await a.inspect();
+      assert.equal(st.corner, 'br');
+      assert.equal(st.open, false, 'dragging the chat button should not open the chat');
+      assert.deepEqual(await saved(), { 'localhost:8080': 'br' });
+    });
+
+    await step('unread messages show on the toolbar icon until the chat is seen', async () => {
+      const badge = () => a.sw.evaluate(() => chrome.action.getBadgeText({}));
+      // Earlier steps left Alice with unread messages; seeing them clears the count.
+      await a.openChat();
+      await waitFor(async () => (await badge()) === '' || (await badge()), 'opening the chat clears earlier unread messages', 3000);
+      await a.page.keyboard.press('Escape');
+      await waitFor(async () => !(await a.inspect()).open, 'Alice closes the chat', 3000);
+      await b.focusField();
+      await b.type('one');
+      await b.type('two');
+      await waitFor(async () => (await badge()) === '2' || (await badge()), 'badge counts 2 while the chat is closed', 5000);
+      await a.openChat();
+      await waitFor(async () => (await badge()) === '' || (await badge()), 'opening the chat clears the badge', 3000);
+
+      // With the chat open but the tab in the background, messages still count.
+      const other = await a.ctx.newPage();
+      await other.bringToFront();
+      await b.type('while you were away');
+      await waitFor(async () => (await badge()) === '1' || (await badge()), 'badge counts in a background tab', 5000);
+      await a.page.bringToFront();
+      await waitFor(async () => (await badge()) === '' || (await badge()), 'coming back to the open chat clears the badge', 3000);
+      await other.close();
+      await a.page.keyboard.press('Escape');
+      await waitFor(async () => !(await a.inspect()).open, 'Alice closes the chat', 3000);
+    });
+
     await step('room waits while one viewer buffers after a seek', async () => {
       site.control('Bob', { stalled: true });
       await a.video((v) => { v.currentTime = 400; });
@@ -453,6 +538,42 @@ async function step(name, fn) {
       await waitFor(async () => (await inSync(b, c)) && (await inSync(a, c)), 'Carol in sync', 20000);
       const history = (await c.status()).chat.map((m) => m.text);
       assert.ok(history.includes('msg 16'), `Carol should see earlier chat, got ${JSON.stringify(history)}`);
+    });
+
+    await step('a click-to-play player starting at 0:00 never moves the room', async () => {
+      const c = users[2];
+      // What pressing play on a click-to-load embed does: a brand-new <video> at 0:00
+      // replaces the old one, and the player's startup code seeks to its start and plays.
+      const pressPlay = () => c.video((old) => {
+        const v = document.createElement('video');
+        v.src = old.currentSrc;
+        v.controls = true;
+        v.autoplay = true;
+        v.addEventListener('loadedmetadata', () => { v.currentTime = 0; }, { once: true });
+        old.replaceWith(v);
+      });
+
+      const before = (await a.state()).time;
+      await pressPlay();
+      await waitFor(async () => (await inSync(a, c)) && (await inSync(a, b)), 'Carol back in sync while playing', 20000);
+      const after = (await a.state()).time;
+      assert.ok(after >= before - 1, `room went back from ${before.toFixed(1)}s to ${after.toFixed(1)}s`);
+
+      await a.video((v) => v.pause());
+      await waitFor(async () => (await b.state()).paused && (await c.state()).paused, 'everyone paused');
+      await sleep(800);
+      const pausedAt = (await a.state()).time;
+      await pressPlay();
+      await waitFor(async () => {
+        const st = await c.state();
+        return st.paused && Math.abs(st.time - pausedAt) < 0.5;
+      }, 'Carol lined up on the paused spot', 20000);
+      await sleep(1000);
+      const x = await a.state();
+      assert.ok(x.paused && Math.abs(x.time - pausedAt) < 0.5, `paused room moved: ${pausedAt.toFixed(1)}s -> ${x.time.toFixed(1)}s, paused ${x.paused}`);
+
+      await a.video((v) => v.play());
+      await waitFor(async () => (await inSync(a, b)) && (await inSync(a, c)), 'everyone playing again', 20000);
     });
 
     await step('leaving stops syncing', async () => {

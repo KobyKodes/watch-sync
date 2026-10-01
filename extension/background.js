@@ -76,6 +76,8 @@ function newSession(tabId, cfg) {
     status: 'connecting',
     error: '',
     roomUrl: '',
+    // Sessions picked back up after a worker restart already had their chance.
+    openedRoomPage: !!cfg.restored,
     state: null, // latest room state from the server
     clock: [], // recent { rtt, offset } samples
     offset: 0, // server time minus local time, from the lowest-RTT sample
@@ -145,7 +147,7 @@ async function restoreSessions() {
     if (!sessions.has(id)) {
       try {
         await chrome.tabs.get(id);
-        connect(id, cfg);
+        connect(id, { ...cfg, restored: true });
       } catch {
         // Tab no longer exists.
       }
@@ -253,6 +255,34 @@ function remeasureClock(s) {
   for (let i = 0; i < 5; i++) s.timers.push(setTimeout(() => ping(s), i * 120));
 }
 
+// Ignores the #fragment, which players often use for their own state.
+function samePage(a, b) {
+  try {
+    const x = new URL(a);
+    const y = new URL(b);
+    return x.origin === y.origin && x.pathname === y.pathname && x.search === y.search;
+  } catch {
+    return a === b;
+  }
+}
+
+// A guest who joins from a page without a video (a new tab, another site) is taken
+// to the page the room was created on, in the same tab (the session follows the
+// tab). A guest already on a page with a video stays put: it may be the same show
+// at a slightly different address. Only on the first join, so a reconnect never
+// pulls someone back from wherever they've gone since.
+const ROOM_PAGE_GRACE_MS = 1500; // time for the page's frames to report their videos
+
+function openRoomPage(s) {
+  if (s.openedRoomPage) return;
+  s.openedRoomPage = true;
+  if (!/^https?:/i.test(s.roomUrl) || samePage(s.roomUrl, s.url)) return;
+  s.timers.push(setTimeout(() => {
+    if (sessions.get(s.tabId) !== s || s.frameId !== null) return;
+    chrome.tabs.update(s.tabId, { url: s.roomUrl }).catch(() => {});
+  }, ROOM_PAGE_GRACE_MS));
+}
+
 function handleServerMessage(s, msg) {
   switch (msg.t) {
     case 'joined':
@@ -267,6 +297,7 @@ function handleServerMessage(s, msg) {
       remeasureClock(s);
       s.timers.push(setInterval(() => ping(s), PING_INTERVAL_MS));
       s.timers.push(setInterval(() => updateExternalAd(s), 500));
+      openRoomPage(s);
       break;
     case 'pong': {
       const now = Date.now();

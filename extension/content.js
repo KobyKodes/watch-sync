@@ -218,6 +218,12 @@
   let quietUntil = 0; // ignore viewer events until this time
   let lastContentPos = 0;
   let seekTarget = null; // our own pending seek
+  // A video that just appeared (a late joiner, or a click-to-play player) starts
+  // wherever its player puts it, usually 0:00. Until it has caught up with the room
+  // once, its play/pause/seek events are the player starting up, not the viewer,
+  // and must not move the room.
+  let following = true;
+  let seededEpoch = -1;
   let autoplayBlocked = false;
   let rateAdjusted = false;
   let stallSince = 0;
@@ -235,6 +241,11 @@
     if (!room) return 0;
     if (room.phase !== 'playing' || now < room.anchor) return room.position;
     return room.position + (now - room.anchor) / 1000;
+  }
+
+  // Alone in a room nobody has acted in yet: there's no shared spot to protect.
+  function untouchedSoloRoom() {
+    return room.lastAction === null && room.members.length === 1;
   }
 
   function shouldBePaused(now = serverNow()) {
@@ -302,8 +313,22 @@
 
     if (Date.now() < localActionUntil) return;
 
+    // A room nobody has acted in yet takes its first member's spot, so creating a
+    // room mid-movie (or the relay restarting) doesn't send anyone back to the start.
+    if (untouchedSoloRoom() && seededEpoch !== room.epoch && (video.currentTime > 1 || !video.paused)) {
+      seededEpoch = room.epoch;
+      following = false;
+      localActionUntil = Date.now() + LOCAL_ACTION_GRACE_MS;
+      send({ type: 'intent', action: video.paused ? 'seek' : 'play', pos: video.currentTime });
+      return;
+    }
+
     const target = expectedPos(now);
     const diff = video.currentTime - target;
+    if (following && video.readyState >= 1 && !video.seeking
+        && Math.abs(diff) <= (shouldBePaused(now) ? ALIGN_SEC : HARD_SEEK_SEC)) {
+      following = false;
+    }
 
     if (shouldBePaused(now)) {
       if (!video.paused) video.pause();
@@ -412,9 +437,11 @@
     if (event.type === 'loadstart' || event.type === 'emptied') {
       // Source change (often an ad being swapped in): don't trust events for a moment.
       quietUntil = Date.now() + QUIET_AFTER_AD_MS;
+      following = true;
       return;
     }
-    if (adActive || Date.now() < quietUntil) return;
+    if (event.type === 'play') autoplayBlocked = false;
+    if (adActive || (following && !untouchedSoloRoom()) || Date.now() < quietUntil) return;
 
     if (event.type === 'seeked') {
       if (seekTarget !== null && Math.abs(video.currentTime - seekTarget) < 0.75) {
@@ -426,7 +453,6 @@
       return;
     }
 
-    if (event.type === 'play') autoplayBlocked = false;
     const paused = shouldBePaused();
     if (event.type === 'play' && paused) {
       if (room.intent === 'playing') {
@@ -444,6 +470,7 @@
   const EVENTS = ['play', 'pause', 'seeked', 'loadstart', 'emptied'];
   function attach(v) {
     EVENTS.forEach((e) => v.addEventListener(e, onVideoEvent));
+    following = true;
     lastTime = -1;
     stallSince = 0;
   }

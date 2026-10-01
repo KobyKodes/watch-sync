@@ -44,6 +44,8 @@ The rule is to wait for everyone. The room never plays while someone is bufferin
   Players often pause the show just before an ad appears. If an ad shows up within 4 s of a pause, that pause is taken back, and the room waits instead of pausing.
 - **Drift correction.** Small drift (over 0.05 s) is corrected by nudging playback speed by up to 10%, with no visible jump. Anything over 1.5 s is fixed with a seek.
 - **Sync everyone.** A button in the popup that anyone can press if things seem off. Everyone lines up on the room's position, every browser re-measures its clock against the server, and playback restarts together. This fixes drift that automatic correction can't detect, such as a stale clock measurement after a laptop wakes from sleep.
+- **Joining late never rewinds the room.** A video that just appeared starts wherever its player puts it, usually 0:00. This covers a late joiner, or a click-to-play player that only creates its `<video>` when you press play. Until that video has caught up with the room once, its play, pause and seek events are treated as the player starting up and ignored, and the viewer is brought to the room's position instead. A new room starts where its creator is, so making a room 20 minutes into a movie keeps everyone at 20 minutes.
+- **Guests are taken to the room's page.** A guest who joins from a page without a video, such as a new tab, is sent to the page the room was created on. Someone already on a page with a video stays where they are.
 - **Play without waiting.** Anyone can use this to stop waiting for a stuck viewer. That viewer catches up automatically once they're ready again.
 - **Content script** (`content.js`): runs in every frame (`all_frames` + `match_origin_as_fallback`) and locks onto the show's video, so an overlay ad player can't take its place.
 - **Background worker** (`background.js`): holds the WebSocket, so page CSP can't block it.
@@ -53,7 +55,9 @@ The rule is to wait for everyone. The room never plays while someone is bufferin
 The chat is a Liquid Glass-style overlay drawn over the video. It's built to stay out of the picture:
 
 - **Previews:** new messages float up as small glass bubbles on the right edge, above the player controls, and fade after 6 seconds.
-- **Chat button:** appears in the top-right corner only while the mouse moves, like player controls. Press ⌥C (Alt+C) to open or close the chat.
+- **Chat button:** appears in the top corner only while the mouse moves, like player controls. Press ⌥C (Alt+C) to open or close the chat.
+- **Any corner:** drag the panel by its header, drag the chat button, or press and hold a floating message, and the chat snaps to the nearest corner of the video. The spot is remembered for each site, so a player with controls in an odd place only needs moving once.
+- **Unread count:** messages that arrive while the chat is closed, or while the tab is in the background, are counted on the toolbar icon until you open the chat.
 - **Panel:** narrow, only as tall as its messages up to half the video's height, and it fades to half opacity after 4 seconds without typing or hovering. When it's full, scroll up to read older messages; it keeps the last 200. While you're scrolled up, new messages don't move you, and a **New messages ↓** button takes you back to the latest. Sending a message also jumps back down.
 - **Replies:** swipe right on any message to reply to it, with a mouse drag, a touch, or a two-finger trackpad swipe. A "Replying to …" bar appears above the text box; Esc or × cancels it. The sent message shows a quote of the original above it. The server fills in the quote from its history, so a reply can't misquote anyone.
 - **Emoji:** the smiley button opens two rows of reaction emoji that scroll sideways. Clicking one inserts it at the cursor.
@@ -78,6 +82,8 @@ The test drives real browser profiles against a player in a cross-origin iframe.
 - manual hold, then play without waiting, then catching up
 - chat delivery, keys not leaking to the player, chat in `<video>` fullscreen with cleanup on exit, and history for late joiners
 - swipe-to-reply by drag and by trackpad, reply quotes, the emoji picker, and the half-height cap that drops old messages
+- moving the chat to another corner (header, chat button, and press-and-hold on a message) and saving it per site
+- the unread count on the toolbar icon, for a closed chat and for a background tab
 - drift correction by speed alone
 - a late joiner
 - leaving the room

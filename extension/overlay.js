@@ -84,12 +84,14 @@
       position: absolute; right: var(--edge); bottom: var(--controls);
       max-height: min(50%, calc(100% - var(--edge) - var(--controls)));
       width: clamp(250px, 30%, 380px); border-radius: 26px;
-      display: flex; flex-direction: column; pointer-events: auto; overflow: hidden;
+      display: flex; flex-direction: column; pointer-events: none; overflow: hidden;
       opacity: 0; transform: translateX(12px) scale(0.98); visibility: hidden;
       transition: opacity 240ms ease, transform 240ms ease, visibility 0s linear 240ms;
     }
     .stage.compact .panel { width: min(66%, 310px); border-radius: 22px; }
-    .panel.open { opacity: 1; transform: none; visibility: visible; transition-delay: 0s; }
+    /* Only an open panel takes the pointer, so a closing one can't swallow a click
+       meant for the previews beneath it. */
+    .panel.open { opacity: 1; transform: none; visibility: visible; pointer-events: auto; transition-delay: 0s; }
     .panel.open.rest { opacity: 0.5; transition: opacity 600ms ease; }
     .head, .compose, .replying { flex: none; }
     .head {
@@ -617,6 +619,7 @@
     function dragFrom(handle, node) {
       handle.addEventListener('pointerdown', (e) => {
         if (e.button !== 0 || e.target.closest('.close')) return;
+        e.preventDefault(); // keeps focus in the message field while moving
         const { pointerId, clientX: x0, clientY: y0 } = e;
         try { handle.setPointerCapture(pointerId); } catch { /* pointer already gone */ }
         const watch = (ev) => {
@@ -906,6 +909,7 @@
           replyingTo: replyTo,
           pickerOpen,
           emojiButton: rect(emojiBtn),
+          field: rect(field),
           firstEmoji: { char: EMOJIS[0], rect: rect(emojis.firstElementChild) },
         };
       },
