@@ -25,9 +25,9 @@
       position: absolute; inset: 0; pointer-events: none;
       font: 16px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
       color: rgba(255,255,255,0.94); -webkit-font-smoothing: antialiased;
-      --edge: 16px; --controls: 72px;
+      --edge: 16px; --controls: 112px;
     }
-    .stage.compact { --edge: 10px; --controls: 56px; font-size: 14px; }
+    .stage.compact { --edge: 10px; --controls: 88px; font-size: 14px; }
 
     /* Clear glass: no fill or blur, so the picture shows through untouched. A thin
        light rim gives each surface its shape, and text carries its own shadow to
